@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F5F6;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#16181B;-webkit-font-smoothing:antialiased}
+a{color:#2F6FDB;text-decoration:none}a:hover{color:#1F55B3}
+input,select,button{font-family:inherit}
+</style>
+</helmet>
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Admin login" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box">
+  <div style="width:100%;max-width:380px;background:#fff;border:1px solid #E2E4E7;border-radius:16px;padding:32px;box-sizing:border-box;display:flex;flex-direction:column">
+    <div style="width:40px;height:40px;border-radius:11px;background:#2F6FDB;color:#fff;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center">F</div>
+    <h1 style="margin:20px 0 4px;font-size:24px;font-weight:600;letter-spacing:-.01em">Fieldbook admin</h1>
+    <p style="margin:0 0 24px;font-size:14px;color:#5D636B;line-height:1.45">View all school visits and manage team members.</p>
+    <label style="font-size:13px;font-weight:600;color:#3A3F45;margin-bottom:6px">Admin PIN</label>
+    <input type="password" inputMode="numeric" maxLength="4" placeholder="4 digits" value="{{ adminPin }}" onChange="{{ onAdminPin }}" onKeyDown="{{ onLoginKey }}" style="height:46px;border:1px solid #D5D8DC;border-radius:10px;padding:0 12px;font-size:18px;letter-spacing:.3em;box-sizing:border-box">
+    <sc-if value="{{ loginErr }}"><div style="color:#B3261E;font-size:13px;margin-top:8px">{{ loginErr }}</div></sc-if>
+    <div style="font-size:12px;color:#7A8088;margin-top:8px">Demo admin PIN: 0000</div>
+    <button onClick="{{ doLogin }}" style="margin-top:24px;height:46px;border:none;border-radius:10px;background:#2F6FDB;color:#fff;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#2558B0">Sign in</button>
+  </div>
+</div>
+</sc-if>
+<sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Web dashboard" style="min-height:100vh;display:flex">
+  <aside style="width:224px;flex:none;position:sticky;top:0;height:100vh;box-sizing:border-box;background:#fff;border-right:1px solid #E2E4E7;padding:18px 12px;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 6px">
+      <div style="width:32px;height:32px;border-radius:9px;background:#2F6FDB;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">F</div>
+      <div style="min-width:0"><div style="font-size:16px;font-weight:600;line-height:1.1">Fieldbook</div><div style="font-size:12px;color:#5D636B">Kanyakumari district</div></div>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="3">
+        <button onClick="{{ n.onClick }}" style="display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border:none;border-radius:8px;background:{{ n.bg }};color:{{ n.fg }};font-size:14px;font-weight:{{ n.weight }};cursor:pointer;text-align:left" style-hover="background:#F1F3F5">
+          <span style="width:3px;height:16px;border-radius:2px;background:{{ n.bar }};flex:none"></span>
+          <span style="flex:1">{{ n.label }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#7A8088">{{ n.count }}</span>
+        </button>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:0 6px">
+      <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5D636B"><span style="width:7px;height:7px;border-radius:50%;background:#1F8A5B"></span>{{ updatedLabel }}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #EDEEF0;padding-top:12px">
+        <span style="font-size:13px;font-weight:500">Admin</span>
+        <button onClick="{{ logout }}" style="border:none;background:none;font-size:13px;font-weight:600;color:#2F6FDB;cursor:pointer;padding:0">Sign out</button>
+      </div>
+    </div>
+  </aside>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+  <header style="position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #E2E4E7;padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;min-height:61px;box-sizing:border-box">
+    <h1 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em;margin-right:8px">{{ pageTitle }}</h1>
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;background:#E9EBED;border-radius:9px;padding:3px">
+      <sc-for list="{{ periods }}" as="p" hint-placeholder-count="4">
+        <button onClick="{{ p.onClick }}" style="height:30px;padding:0 14px;border:none;border-radius:7px;background:{{ p.bg }};color:{{ p.fg }};box-shadow:{{ p.shadow }};font-size:13px;font-weight:500;cursor:pointer">{{ p.label }}</button>
+      </sc-for>
+    </div>
+    </sc-if>
+    <sc-if value="{{ showSearch }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1 1 220px;max-width:360px;display:flex;align-items:center;gap:8px;height:36px;border:1px solid #D5D8DC;border-radius:9px;padding:0 12px;background:#fff">
+      <span style="width:11px;height:11px;border:2px solid #7A8088;border-radius:50%;flex:none;box-sizing:border-box"></span>
+      <input placeholder="{{ searchPlaceholder }}" value="{{ query }}" onChange="{{ onQuery }}" style="flex:1;min-width:0;border:none;outline:none;font-size:14px;background:transparent">
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <button onClick="{{ exportCsv }}" style="flex:none;white-space:nowrap;height:36px;padding:0 14px;border-radius:9px;border:1px solid #D5D8DC;background:#fff;font-size:13px;font-weight:600;color:#16181B;cursor:pointer" style-hover="background:#F4F5F6">Export CSV</button>
+    </div>
+    </sc-if>
+  </header>
+
+  <sc-if value="{{ isMembers }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Team members" style="flex:1;width:100%;max-width:960px;padding:24px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+    <p style="margin:0;font-size:14px;color:#5D636B">Members sign in to the mobile app with their name and 4-digit PIN.</p>
+    <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px">
+      <label style="font-size:13px;font-weight:600;color:#3A3F45">Add a member</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <input value="{{ newName }}" onChange="{{ onNewName }}" onKeyDown="{{ onNewKey }}" placeholder="Full name" style="flex:1 1 240px;height:42px;border:1px solid {{ newBorder }};border-radius:9px;padding:0 12px;font-size:15px;box-sizing:border-box">
+        <button onClick="{{ addMember }}" style="flex:none;height:42px;padding:0 18px;border:none;border-radius:9px;background:#2F6FDB;color:#fff;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:#2558B0">Add &amp; generate PIN</button>
+      </div>
+      <sc-if value="{{ newErr }}"><div style="color:#B3261E;font-size:13px">{{ newErr }}</div></sc-if>
+      <sc-if value="{{ hasJustAdded }}">
+        <div style="margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;background:#E8F0FC;border:1px solid #C3D6F5;border-radius:10px;padding:12px 14px">
+          <div style="flex:1 1 220px;font-size:14px;color:#1F3F7A"><b style="font-weight:600">{{ justAdded.name }}</b> {{ justAdded.verb }}. Share this PIN with them:</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:26px;letter-spacing:.25em;color:#16181B">{{ justAdded.pin }}</div>
+          <button onClick="{{ dismissAdded }}" style="border:none;background:none;color:#2F6FDB;font-size:13px;font-weight:600;cursor:pointer;padding:0">Done</button>
+        </div>
+      </sc-if>
+    </section>
+    <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;overflow:hidden">
+      <div style="padding:12px 16px;border-bottom:1px solid #E2E4E7;font-size:13px;color:#5D636B">{{ memberCountLabel }}</div>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;min-width:640px">
+        <thead><tr style="background:#F8F9FA">
+          <th style="text-align:left;padding:10px 16px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7">Name</th>
+          <th style="text-align:left;padding:10px 12px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7">PIN</th>
+          <th style="text-align:right;padding:10px 12px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7">Visits</th>
+          <th style="text-align:left;padding:10px 12px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7">Last visit</th>
+          <th style="text-align:right;padding:10px 16px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7"></th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ members }}" as="m" hint-placeholder-count="8">
+            <tr>
+              <td style="padding:10px 16px;border-bottom:1px solid #EDEEF0"><div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#EEF0F2;font-size:11px;font-weight:600;color:#3A3F45;display:flex;align-items:center;justify-content:center;flex:none">{{ m.initials }}</span><span style="font-weight:500">{{ m.name }}</span></div></td>
+              <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;white-space:nowrap"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:.15em;width:56px">{{ m.pin }}</span><button onClick="{{ m.toggleReveal }}" style="border:none;background:none;color:#2F6FDB;font-size:13px;font-weight:600;cursor:pointer;padding:0">{{ m.revealLabel }}</button></div></td>
+              <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;text-align:right;font-family:'IBM Plex Mono',monospace">{{ m.visits }}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;color:#5D636B;white-space:nowrap">{{ m.last }}</td>
+              <td style="padding:10px 16px;border-bottom:1px solid #EDEEF0;text-align:right;white-space:nowrap">
+                <sc-if value="{{ m.notConfirming }}"><div style="display:inline-flex;gap:6px">
+                  <button onClick="{{ m.resetPin }}" style="height:30px;padding:0 10px;border:1px solid #D5D8DC;border-radius:7px;background:#fff;font-size:13px;font-weight:500;color:#16181B;cursor:pointer" style-hover="background:#F4F5F6">Reset PIN</button>
+                  <button onClick="{{ m.askRemove }}" style="height:30px;padding:0 10px;border:1px solid #D5D8DC;border-radius:7px;background:#fff;font-size:13px;font-weight:500;color:#B3261E;cursor:pointer" style-hover="background:#FBEDEC">Remove</button>
+                </div></sc-if>
+                <sc-if value="{{ m.confirming }}"><div style="display:inline-flex;gap:6px;align-items:center">
+                  <span style="font-size:13px;color:#5D636B">Remove?</span>
+                  <button onClick="{{ m.remove }}" style="height:30px;padding:0 10px;border:none;border-radius:7px;background:#B3261E;font-size:13px;font-weight:600;color:#fff;cursor:pointer">Remove</button>
+                  <button onClick="{{ m.cancelRemove }}" style="height:30px;padding:0 10px;border:1px solid #D5D8DC;border-radius:7px;background:#fff;font-size:13px;font-weight:500;color:#16181B;cursor:pointer">Cancel</button>
+                </div></sc-if>
+              </td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <p style="margin:0;font-size:12px;color:#7A8088">Removing a member blocks their sign-in. Their past visits stay in the records.</p>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+  <main data-screen-label="Overview" style="flex:1;width:100%;max-width:1440px;padding:20px 24px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+        <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px 16px">
+          <div style="font-size:13px;color:#5D636B;font-weight:500">{{ k.label }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;margin-top:6px;color:{{ k.color }}">{{ k.value }}</div>
+          <div style="font-size:12px;color:#7A8088;margin-top:2px">{{ k.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px">
+      <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px"><h2 style="margin:0;font-size:15px;font-weight:600">Visits by zone</h2><span style="font-size:12px;color:#7A8088">click to filter</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <sc-for list="{{ zoneStats }}" as="z" hint-placeholder-count="6">
+            <button onClick="{{ z.onClick }}" style="display:grid;grid-template-columns:150px minmax(0,1fr) 34px;align-items:center;gap:10px;padding:6px 8px;border:none;border-radius:8px;background:{{ z.bg }};cursor:pointer;text-align:left;color:#16181B" style-hover="background:#F4F5F6">
+              <span style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="font-weight:600">{{ z.short }}</b> {{ z.place }}</span>
+              <span style="height:8px;background:#EEF0F2;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:{{ z.pct }};background:#2F6FDB;border-radius:4px"></span></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right">{{ z.count }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px"><h2 style="margin:0;font-size:15px;font-weight:600">Team members</h2><span style="font-size:12px;color:#7A8088">visits · follow-ups</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <sc-for list="{{ memberStats }}" as="m" hint-placeholder-count="8">
+            <button onClick="{{ m.onClick }}" style="display:grid;grid-template-columns:28px minmax(0,1fr) 70px 28px 28px;align-items:center;gap:10px;padding:5px 8px;border:none;border-radius:8px;background:{{ m.bg }};cursor:pointer;text-align:left;color:#16181B" style-hover="background:#F4F5F6">
+              <span style="width:26px;height:26px;border-radius:50%;background:#EEF0F2;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;color:#3A3F45">{{ m.initials }}</span>
+              <span style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.name }}</span>
+              <span style="height:6px;background:#EEF0F2;border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:{{ m.pct }};background:#2F6FDB"></span></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right">{{ m.count }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;color:{{ m.fuColor }}">{{ m.fu }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:16px;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><h2 style="margin:0;font-size:15px;font-weight:600">Follow-ups due</h2><span style="font-size:12px;color:#7A8088">{{ fuCountLabel }}</span></div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ followups }}" as="f" hint-placeholder-count="5">
+            <button onClick="{{ f.open }}" style="display:flex;gap:10px;align-items:center;padding:9px 4px;border:none;border-bottom:1px solid #EDEEF0;background:none;cursor:pointer;text-align:left;color:#16181B" style-hover="background:#F8F9FA">
+              <span style="width:64px;flex:none;font-size:12px;font-weight:600;color:{{ f.dueColor }}">{{ f.due }}</span>
+              <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.school }}</span><span style="display:block;font-size:12px;color:#5D636B">{{ f.sub }}</span></span>
+            </button>
+          </sc-for>
+          <sc-if value="{{ noFollowups }}"><div style="padding:20px 0;color:#5D636B;font-size:13px">No open follow-ups.</div></sc-if>
+        </div>
+      </section>
+    </div>
+
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isSchools }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Schools" style="flex:1;width:100%;max-width:1440px;padding:20px 24px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+      <sc-for list="{{ schoolKpis }}" as="k" hint-placeholder-count="4">
+        <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px 16px">
+          <div style="font-size:13px;color:#5D636B;font-weight:500">{{ k.label }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;margin-top:6px">{{ k.value }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <section style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;overflow:hidden">
+      <div style="padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-bottom:1px solid #E2E4E7">
+        <h2 style="margin:0;font-size:15px;font-weight:600;margin-right:auto">All schools <span style="font-weight:400;color:#5D636B;font-size:13px">{{ schoolCountLabel }}</span></h2>
+        <select value="{{ zoneFilter }}" onChange="{{ onZone }}" style="height:34px;border:1px solid #D5D8DC;border-radius:8px;padding:0 8px;font-size:13px;background:#fff;color:#16181B">
+          <option value="">All zones</option>
+          <sc-for list="{{ zones }}" as="z"><option value="{{ z }}">{{ z }}</option></sc-for>
+        </select>
+        <select value="{{ statusFilter }}" onChange="{{ onStatus }}" style="height:34px;border:1px solid #D5D8DC;border-radius:8px;padding:0 8px;font-size:13px;background:#fff;color:#16181B">
+          <option value="all">Any status</option><option value="done">Done</option><option value="followup">Follow-up open</option>
+        </select>
+        <sc-if value="{{ hasSchoolFilters }}"><button onClick="{{ clearFilters }}" style="border:none;background:none;color:#2F6FDB;font-size:13px;font-weight:600;cursor:pointer;padding:0 4px">Clear</button></sc-if>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:1100px">
+          <thead><tr style="background:#F8F9FA">
+            <sc-for list="{{ schoolCols }}" as="c" hint-placeholder-count="9">
+              <th onClick="{{ c.onClick }}" style="text-align:{{ c.align }};padding:10px 12px;font-size:12px;font-weight:600;color:#5D636B;border-bottom:1px solid #E2E4E7;white-space:nowrap;cursor:pointer;user-select:none">{{ c.label }} <span style="color:#2F6FDB">{{ c.arrow }}</span></th>
+            </sc-for>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ schools }}" as="r" hint-placeholder-count="10">
+              <tr onClick="{{ r.open }}" style="cursor:pointer;background:{{ r.bg }}" style-hover="background:#F4F7FD">
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;max-width:260px"><div style="font-weight:600">{{ r.school }}</div><div style="font-size:12px;color:#5D636B">{{ r.location }}</div></td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;white-space:nowrap">{{ r.zoneShort }}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;text-align:right;font-family:'IBM Plex Mono',monospace">{{ r.studentsLabel }}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0"><div>{{ r.coordName }}</div><div style="font-size:12px;color:#7A8088;white-space:nowrap">{{ r.coordPhone }}</div></td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;color:#3A3F45">{{ r.coordEmail }}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;text-align:right;font-family:'IBM Plex Mono',monospace">{{ r.visitCount }}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;white-space:nowrap"><div>{{ r.lastLabel }}</div><div style="font-size:12px;color:#7A8088">{{ r.lastBy }}</div></td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0">{{ r.membersLabel }}</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #EDEEF0;white-space:nowrap">
+                  <sc-if value="{{ r.isDone }}"><span style="font-size:12px;font-weight:600;color:#1F7A4D;background:#E5F3EC;padding:2px 8px;border-radius:6px">Done</span></sc-if>
+                  <sc-if value="{{ r.isFollow }}"><span style="font-size:12px;font-weight:600;color:{{ r.fuFg }};background:{{ r.fuBg }};padding:2px 8px;border-radius:6px">Follow-up {{ r.followLabel }}</span></sc-if>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <sc-if value="{{ noSchools }}"><div style="padding:40px;text-align:center;color:#5D636B;font-size:14px">No schools match.</div></sc-if>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 16px;border-top:1px solid #E2E4E7">
+        <span style="font-size:13px;color:#5D636B;margin-right:auto">{{ pageRangeLabel }}</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#5D636B">Rows
+          <select value="{{ pageSize }}" onChange="{{ onPageSize }}" style="height:30px;border:1px solid #D5D8DC;border-radius:7px;padding:0 6px;font-size:13px;background:#fff;color:#16181B"><option value="5">5</option><option value="10">10</option><option value="25">25</option><option value="50">50</option></select>
+        </label>
+        <div style="display:flex;gap:4px">
+          <button onClick="{{ prevPage }}" disabled="{{ isFirstPage }}" style="height:30px;padding:0 10px;border:1px solid #D5D8DC;border-radius:7px;background:#fff;font-size:13px;color:{{ prevFg }};cursor:pointer">← Prev</button>
+          <sc-for list="{{ pageBtns }}" as="pb" hint-placeholder-count="2">
+            <button onClick="{{ pb.onClick }}" style="min-width:30px;height:30px;padding:0 6px;border:1px solid {{ pb.border }};border-radius:7px;background:{{ pb.bg }};color:{{ pb.fg }};font-size:13px;font-weight:600;cursor:pointer;font-family:'IBM Plex Mono',monospace">{{ pb.label }}</button>
+          </sc-for>
+          <button onClick="{{ nextPage }}" disabled="{{ isLastPage }}" style="height:30px;padding:0 10px;border:1px solid #D5D8DC;border-radius:7px;background:#fff;font-size:13px;color:{{ nextFg }};cursor:pointer">Next →</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  </sc-if>
+  </div>
+
+  <sc-if value="{{ hasSchool }}">
+    <div onClick="{{ closeSchool }}" style="position:fixed;inset:0;background:rgba(22,24,27,.28);z-index:10"></div>
+    <aside data-screen-label="School drawer" style="position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:#fff;z-index:11;box-shadow:-12px 0 32px rgba(20,24,30,.12);display:flex;flex-direction:column">
+      <div style="padding:18px 20px;border-bottom:1px solid #E2E4E7;display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:#5D636B;font-weight:500">{{ sc.zone }}</div>
+          <div style="font-size:20px;font-weight:600;line-height:1.25;margin-top:2px;text-wrap:pretty">{{ sc.school }}</div>
+          <div style="font-size:13px;color:#5D636B;margin-top:2px">{{ sc.location }}</div>
+        </div>
+        <button onClick="{{ closeSchool }}" style="width:32px;height:32px;border:1px solid #D5D8DC;border-radius:8px;background:#fff;font-size:16px;cursor:pointer;color:#3A3F45">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <sc-for list="{{ sc.rows }}" as="x">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #EDEEF0;font-size:13px"><span style="color:#5D636B">{{ x.k }}</span><span style="font-weight:500;text-align:right">{{ x.v }}</span></div>
+          </sc-for>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">School coordinator</div>
+          <div style="font-size:15px;font-weight:600">{{ sc.coordName }}</div>
+          <div style="font-size:13px;color:#5D636B;margin-top:2px">{{ sc.contact }}</div>
+        </div>
+        <sc-if value="{{ sc.hasClasses }}">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Students per class · latest visit</div>
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px">
+              <sc-for list="{{ sc.classRows }}" as="cr">
+                <div style="background:#F4F5F6;border-radius:8px;padding:6px 8px"><div style="font-size:11px;color:#5D636B">{{ cr.k }}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:14px">{{ cr.v }}</div></div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Visit history · {{ sc.visitCount }}</div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ sc.history }}" as="h">
+              <div style="display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid #EDEEF0">
+                <div style="font-size:12px;color:#5D636B"><div style="font-weight:600;color:#16181B">{{ h.dateLabel }}</div>{{ h.time }}</div>
+                <div style="min-width:0">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px"><b style="font-weight:600">{{ h.by }}</b><span style="color:#5D636B">met {{ h.met }}</span>
+                    <sc-if value="{{ h.isFollow }}"><span style="font-size:11px;font-weight:600;color:#8A4A06;background:#FCF1E3;padding:1px 6px;border-radius:5px">Follow-up {{ h.followLabel }}</span></sc-if>
+                    <sc-if value="{{ h.isDone }}"><span style="font-size:11px;font-weight:600;color:#1F7A4D;background:#E5F3EC;padding:1px 6px;border-radius:5px">Done</span></sc-if>
+                  </div>
+                  <div style="font-size:13px;line-height:1.5;color:#3A3F45;margin-top:4px;text-wrap:pretty">{{ h.notes }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{ hasDetail }}">
+    <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;background:rgba(22,24,27,.28);z-index:10"></div>
+    <aside data-screen-label="Visit drawer" style="position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:#fff;z-index:11;box-shadow:-12px 0 32px rgba(20,24,30,.12);display:flex;flex-direction:column">
+      <div style="padding:18px 20px;border-bottom:1px solid #E2E4E7;display:flex;gap:12px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:#5D636B;font-weight:500">{{ d.zone }}</div>
+          <div style="font-size:20px;font-weight:600;line-height:1.25;margin-top:2px;text-wrap:pretty">{{ d.school }}</div>
+          <div style="font-size:13px;color:#5D636B;margin-top:2px">{{ d.location }}</div>
+        </div>
+        <button onClick="{{ closeDetail }}" style="width:32px;height:32px;border:1px solid #D5D8DC;border-radius:8px;background:#fff;font-size:16px;cursor:pointer;color:#3A3F45">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <sc-for list="{{ d.rows }}" as="x">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #EDEEF0;font-size:13px"><span style="color:#5D636B">{{ x.k }}</span><span style="font-weight:500;text-align:right">{{ x.v }}</span></div>
+          </sc-for>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">School coordinator</div>
+          <div style="font-size:15px;font-weight:600">{{ d.coordName }}</div>
+          <div style="font-size:13px;color:#5D636B;margin-top:2px">{{ d.contact }}</div>
+        </div>
+        <sc-if value="{{ d.hasClasses }}">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Students per class</div>
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px">
+              <sc-for list="{{ d.classRows }}" as="cr">
+                <div style="background:#F4F5F6;border-radius:8px;padding:6px 8px"><div style="font-size:11px;color:#5D636B">{{ cr.k }}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:14px">{{ cr.v }}</div></div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Notes / outcome</div>
+          <div style="font-size:14px;line-height:1.55;text-wrap:pretty">{{ d.notes }}</div>
+        </div>
+      </div>
+    </aside>
+  </sc-if>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultPeriod&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;today&quot;,&quot;week&quot;,&quot;month&quot;,&quot;all&quot;],&quot;default&quot;:&quot;month&quot;,&quot;tsType&quot;:&quot;'today'|'week'|'month'|'all'&quot;}}">
+class Component extends DCLogic {
+  static TEAM = ['Asha Verma','Rahul Nair','Priya Singh','Kabir Shah','Meera Iyer','Arjun Rao','Neha Gupta','Vikram Das'];
+  static ZONES = ['Zone 1 — Nagercoil','Zone 2 — Thovalai','Zone 3 — Thuckalay','Zone 4 — Marthandam','Zone 5 — Kulasekaram','Zone 6 — Kanyakumari'];
+  static CLASSES = ['LKG','UKG','1','2','3','4','5','6','7','8','9','10','11','12'];
+  static KEY = 'fieldbook-visits-v2';
+  static TKEY = 'fieldbook-team-v1';
+  static SEED_PINS = ['2468','1357','8024','5791','3146','6620','9083','4419'];
+  static ADMIN_PIN = '0000';
+  static loadTeam() { try { const t = JSON.parse(localStorage.getItem(Component.TKEY)); if (t && t.length) return t; } catch (e) {} return Component.TEAM.map((name, i) => ({ id: 'm' + (i + 1), name, pin: Component.SEED_PINS[i], added: Component.ago(60) })); }
+  static iso(d) { const z = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); }
+  static ago(n) { const d = new Date(); d.setDate(d.getDate() - n); return Component.iso(d); }
+  static seed() {
+    const a = Component.ago, T = Component.TEAM;
+    const rows = [
+      [0,'10:30','Govt. Higher Secondary School, Vadasery','Vadasery, Nagercoil',1,840,T[0],'Mrs. Kavitha R.','Headmistress','Mr. Suresh Kumar','+91 98110 22341','suresh.k@ghssvadasery.edu','Demoed the reading kit to Class 4 teachers. HM keen to pilot in two sections from November.','followup',a(-7)],
+      [0,'09:15',"St. Xavier's Primary School",'Kottar, Nagercoil',1,520,T[1],'Fr. Thomas','Headmaster','Ms. Ritu Jebaraj','+91 94140 55120','ritu.j@sxp.org','Signed MoU. Kits to be delivered by 2 Nov.','done',''],
+      [1,'14:00','Govt. High School, Thovalai','Thovalai',2,610,T[2],'Mr. Anil Joseph','Assistant HM','Mr. Anil Joseph','+91 98220 11873','anil.j@ghsthovalai.in','Teacher training scheduled for Saturday. Need projector confirmation.','followup',a(-3)],
+      [1,'11:20','Sunrise Matriculation School','Aralvaimozhi',2,650,T[3],'Ms. Deepa Kumari','Coordinator','Ms. Deepa Kumari','+91 99000 43210','deepa@sunrise.edu.in','Baseline assessment completed for 3 classes.','done',''],
+      [2,'10:00','Panchayat Union Primary School','Thuckalay',3,310,T[2],'Mr. Ganesan P.','Head Teacher','Mrs. Sunitha M.','+91 97650 88213','','Low attendance this week. Revisit after Deepavali.','followup',a(2)],
+      [3,'12:45','Infant Jesus Hr. Sec. School','Mulagumoodu, Thuckalay',3,2100,T[0],'Dr. Neela S.','Principal','Mr. Rohan Raj','+91 98100 77651','r.raj@ijhss.edu','Shared impact report; management review pending.','followup',a(-5)],
+      [4,'09:40','Govt. Girls Hr. Sec. School','Marthandam',4,980,T[4],'Mrs. Usha B.','Headmistress','Ms. Pooja Anand','+91 98731 66420','pooja.a@ggsss.in','Library corner set up. Photos shared on group.','done',''],
+      [5,'15:10','Holy Cross Convent School','Kuzhithurai, Marthandam',4,760,T[5],'Sr. Maria','Principal',"Mr. Ivan D'Cruz",'+91 98200 31457','ivan@holycross.edu','Introductory meeting. Sent brochure and pricing.','done',''],
+      [6,'11:00','Govt. High School, Kulasekaram','Kulasekaram',5,540,T[6],'Mr. Subramanian G.','Headmaster','Mr. Subramanian G.','+91 94330 12598','subbu@ghskulasekaram.in','Completed term-1 review. Scores up 12% vs baseline.','done',''],
+      [8,'10:15','Little Flower Matric School','Thiruvattar, Kulasekaram',5,430,T[3],'Ms. Lakshmi Iyer','Academic Head','Ms. Lakshmi Iyer','+91 98410 20984','lakshmi@lfs.edu.in','Requested Tamil-medium materials.','followup',a(-2)],
+      [10,'13:30','Govt. Hr. Sec. School, Kanyakumari','Kanyakumari',6,690,T[7],'Mr. Ramesh R.','Headmaster','Mrs. Swathi R.','+91 99490 61732','','Monitoring visit. All sections on schedule.','done',''],
+      [13,'10:50',"St. Antony's Hr. Sec. School",'Agastheeswaram, Kanyakumari',6,1500,T[4],'Mr. Sharma','Principal','Ms. Anjali V.','+91 98110 90012','anjali.v@stantonys.edu','Renewal discussion for next academic year.','done',''],
+      [16,'09:30','Sacred Heart School','Colachel, Thuckalay',3,820,T[1],'Sr. Annie','Principal','Mr. Joseph K.','+91 94470 55618','joseph@shscolachel.in','Teacher feedback session. Collected 24 forms.','done',''],
+      [21,'14:20','Panchayat Union Middle School','Suchindram, Thovalai',2,460,T[5],'Mrs. Shaila','Head Teacher','Mr. Salim S.','+91 98920 40871','','Space constraints; proposed after-school slot.','done','']
+    ];
+    const split = (tot, i) => { const n = tot > 900 ? 14 : 8, w = Component.CLASSES.slice(0, n).map((_, j) => 1 + ((i * 7 + j * 3) % 5) / 10), sw = w.reduce((x, y) => x + y, 0), o = {}; let left = tot; w.forEach((x, j) => { const c = j === n - 1 ? left : Math.round(tot * x / sw); o[Component.CLASSES[j]] = String(c); left -= c; }); return o; };
+    return rows.map((r, i) => ({ id: 'v' + (i + 1), date: a(r[0]), time: r[1], school: r[2], location: r[3], zone: Component.ZONES[r[4] - 1], classCounts: split(r[5], i), students: String(r[5]), by: r[6], metName: r[7], metRole: r[8], coordName: r[9], coordPhone: r[10], coordEmail: r[11], notes: r[12], status: r[13], followUp: r[14], pending: false }));
+  }
+  constructor(props) {
+    super(props);
+    this.state = { screen: (props.skipLogin ?? false) ? 'dash' : 'login', view: 'overview', adminPin: '', loginErr: '', team: Component.loadTeam(), newName: '', newErr: '', justAdded: null, revealed: {}, confirmRemove: null, visits: this.load(), period: props.defaultPeriod ?? 'month', query: '', zoneFilter: '', memberFilter: '', statusFilter: 'all', sortKey: 'date', sortDir: -1, detailId: null, schoolSort: 'last', schoolDir: -1, schoolKey: null, page: 1, pageSize: props.pageSize ?? 10, loadedAt: new Date() };
+  }
+  load() { try { const v = JSON.parse(localStorage.getItem(Component.KEY)); if (v && v.length) return v; } catch (e) {} return Component.seed(); }
+  componentDidMount() {
+    this._onStorage = e => { if (e.key === Component.KEY) this.setState({ visits: this.load(), loadedAt: new Date() }); if (e.key === Component.TKEY) this.setState({ team: Component.loadTeam() }); };
+    window.addEventListener('storage', this._onStorage);
+  }
+  componentWillUnmount() { window.removeEventListener('storage', this._onStorage); }
+  saveTeam(team, extra) { try { localStorage.setItem(Component.TKEY, JSON.stringify(team)); } catch (e) {} this.setState({ team, ...extra }); }
+  genPin(team, not) { const used = new Set(team.map(m => m.pin)); let p; do { p = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); } while (used.has(p) || p === not || p === Component.ADMIN_PIN); return p; }
+  daysFrom(iso) { return Math.round((new Date(Component.iso(new Date()) + 'T00:00') - new Date(iso + 'T00:00')) / 864e5); }
+  inPeriod(v, p) {
+    if (p === 'all') return true;
+    const n = this.daysFrom(v.date);
+    if (p === 'today') return n === 0;
+    if (p === 'week') return n >= 0 && n < 7;
+    const d = new Date(v.date + 'T00:00'), now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }
+  dLabel(iso, long) {
+    if (!iso) return '';
+    const n = this.daysFrom(iso);
+    if (n === 0) return 'Today'; if (n === 1) return 'Yesterday'; if (n === -1) return 'Tomorrow';
+    return new Date(iso + 'T00:00').toLocaleDateString('en-GB', long ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' });
+  }
+  initials(n) { return n.replace(/^(Mr|Mrs|Ms|Dr|Fr|Sr)\.?\s*/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
+  schoolCsv(list) {
+    const q = x => '"' + String(x ?? '').replace(/"/g, '""') + '"';
+    const H = ['School','Location','Zone','Students','Coordinator','Phone','Email','Visits','Last visit','Last visited by','Members','Status','Next follow-up'];
+    const lines = list.map(r => [r.school, r.location, r.zone, r.students, r.coordName, r.coordPhone, r.coordEmail, r.visitCount, r.last.date, r.last.by, r.membersLabel, r.status === 'followup' ? 'Follow-up' : 'Done', r.followUp].map(q).join(','));
+    const blob = new Blob([[H.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'schools-' + Component.iso(new Date()) + '.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  csv(list) {
+    const H = ['Date','Time','School','Location','Zone','Visited by','Met with','Role','Coordinator','Phone','Email','Students',...Component.CLASSES.map(c => /^\d/.test(c) ? 'Class ' + c : c),'Status','Follow-up date','Notes'];
+    const q = x => '"' + String(x ?? '').replace(/"/g, '""') + '"';
+    const lines = list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, ...Component.CLASSES.map(c => (v.classCounts || {})[c] || ''), v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes].map(q).join(','));
+    const blob = new Blob([[H.map(q).join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'school-visits-' + Component.iso(new Date()) + '.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  renderVals() {
+    const s = this.state, ACC = '#2F6FDB', go = p => () => this.setState(p);
+    const names = s.team.map(m => m.name);
+    const inP = s.visits.filter(v => this.inPeriod(v, s.period));
+    const q = s.query.trim().toLowerCase();
+    const filtered = inP.filter(v =>
+      (!s.zoneFilter || v.zone === s.zoneFilter) && (!s.memberFilter || v.by === s.memberFilter) &&
+      (s.statusFilter === 'all' || v.status === s.statusFilter) &&
+      (!q || [v.school, v.location, v.zone, v.by, v.metName, v.coordName, v.notes].join(' ').toLowerCase().includes(q)));
+    const sk = s.sortKey, dir = s.sortDir;
+    const val = v => sk === 'date' ? v.date + v.time : sk === 'students' ? +v.students || 0 : String(v[sk] || '').toLowerCase();
+    const sorted = [...filtered].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * dir);
+
+    const schools = new Set(filtered.map(v => v.school.toLowerCase())).size;
+    const students = [...new Map(filtered.map(v => [v.school.toLowerCase(), +v.students || 0])).values()].reduce((a, b) => a + b, 0);
+    const openFu = s.visits.filter(v => v.status === 'followup');
+    const overdue = openFu.filter(v => v.followUp && this.daysFrom(v.followUp) > 0);
+    const periodName = { today: 'today', week: 'last 7 days', month: 'this month', all: 'all time' }[s.period];
+
+    const zc = Component.ZONES.map(z => ({ z, n: inP.filter(v => v.zone === z).length }));
+    const zmax = Math.max(1, ...zc.map(x => x.n));
+    const mc = names.map(m => ({ m, n: inP.filter(v => v.by === m).length, fu: openFu.filter(v => v.by === m).length })).sort((a, b) => b.n - a.n);
+    const mmax = Math.max(1, ...mc.map(x => x.n));
+    const fus = [...openFu].sort((a, b) => (a.followUp || '').localeCompare(b.followUp || ''));
+
+    const cols = [['date','Date'],['school','School'],['zone','Zone'],['by','Visited by'],['metName','Met with'],['coordName','Coordinator'],['students','Students','right'],['status','Status'],['notes','Notes']].map(([k, l, al]) => ({
+      label: l, align: al || 'left', arrow: sk === k ? (dir > 0 ? '↑' : '↓') : '',
+      onClick: () => this.setState(st => st.sortKey === k ? { sortDir: -st.sortDir } : { sortKey: k, sortDir: k === 'date' || k === 'students' ? -1 : 1 })
+    }));
+
+    const byKey = new Map();
+    s.visits.forEach(v => { const k = v.school.trim().toLowerCase(); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(v); });
+    const allSchools = [...byKey.entries()].map(([key, vs]) => {
+      vs = [...vs].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+      const L = vs[0], pick = f => (vs.find(v => v[f]) || {})[f] || '';
+      const fuV = vs.find(v => v.status === 'followup');
+      return { key, visits: vs, last: L, school: L.school, location: L.location, zone: L.zone || '', students: pick('students'), coordName: pick('coordName'), coordPhone: pick('coordPhone'), coordEmail: pick('coordEmail'), visitCount: vs.length, members: [...new Set(vs.map(v => v.by))], status: L.status, followUp: L.status === 'followup' ? L.followUp : '', fuV };
+    });
+    const sf = allSchools.filter(r => (!s.zoneFilter || r.zone === s.zoneFilter) && (s.statusFilter === 'all' || r.status === s.statusFilter) &&
+      (!q || [r.school, r.location, r.zone, r.coordName, r.coordPhone, r.coordEmail, r.members.join(' ')].join(' ').toLowerCase().includes(q)));
+    const ssk = s.schoolSort, sdir = s.schoolDir;
+    const sval = r => ssk === 'last' ? r.last.date + r.last.time : ssk === 'students' ? +r.students || 0 : ssk === 'visitCount' ? r.visitCount : ssk === 'status' ? r.status + (r.followUp || '') : String(r[ssk] || '').toLowerCase();
+    const schoolList = [...sf].sort((a, b) => (sval(a) > sval(b) ? 1 : sval(a) < sval(b) ? -1 : 0) * sdir).map(r => r);
+    const schoolCols = [['school','School'],['zone','Zone'],['students','Students','right'],['coordName','Coordinator'],['coordEmail','Email'],['visitCount','Visits','right'],['last','Last visit'],['members','Visited by'],['status','Status']].map(([k, l, al]) => ({
+      label: l, align: al || 'left', arrow: ssk === k ? (sdir > 0 ? '↑' : '↓') : '',
+      onClick: () => this.setState(st => st.schoolSort === k ? { schoolDir: -st.schoolDir, page: 1 } : { page: 1, schoolSort: k, schoolDir: ['last','students','visitCount'].includes(k) ? -1 : 1 })
+    }));
+    const S0 = allSchools.find(r => r.key === s.schoolKey);
+    const scc = S0 && (S0.visits.find(v => Object.values(v.classCounts || {}).some(x => +x)) || {}).classCounts || {};
+    const sc = S0 ? {
+      ...S0, contact: [S0.coordPhone, S0.coordEmail].filter(Boolean).join(' · ') || 'No contact details',
+      hasClasses: Object.values(scc).some(x => +x),
+      classRows: Component.CLASSES.filter(c => +scc[c]).map(c => ({ k: /^\d/.test(c) ? 'Class ' + c : c, v: scc[c] })),
+      rows: [
+        { k: 'Students', v: S0.students ? Number(S0.students).toLocaleString('en-IN') : '—' },
+        { k: 'Visits', v: S0.visitCount },
+        { k: 'Visited by', v: S0.members.join(', ') },
+        { k: 'Status', v: S0.status === 'followup' ? 'Follow-up · ' + this.dLabel(S0.followUp, true) : 'Done' }
+      ],
+      history: S0.visits.map(v => ({ dateLabel: this.dLabel(v.date), time: v.time, by: v.by, met: v.metName + (v.metRole ? ' (' + v.metRole + ')' : ''), notes: v.notes || 'No notes.', isDone: v.status === 'done', isFollow: v.status === 'followup', followLabel: this.dLabel(v.followUp) }))
+    } : {};
+    const d0 = s.visits.find(v => v.id === s.detailId);
+    const cc = d0 && d0.classCounts || {};
+    const d = d0 ? {
+      ...d0, notes: d0.notes || 'No notes added.',
+      contact: [d0.coordPhone, d0.coordEmail].filter(Boolean).join(' · ') || 'No contact details',
+      hasClasses: Object.values(cc).some(x => +x),
+      classRows: Component.CLASSES.filter(c => +cc[c]).map(c => ({ k: /^\d/.test(c) ? 'Class ' + c : c, v: cc[c] })),
+      rows: [
+        { k: 'Date', v: this.dLabel(d0.date, true) + (d0.time ? ', ' + d0.time : '') },
+        { k: 'Visited by', v: d0.by },
+        { k: 'Met with', v: d0.metName + (d0.metRole ? ' (' + d0.metRole + ')' : '') },
+        { k: 'Students', v: d0.students ? Number(d0.students).toLocaleString('en-IN') : '—' },
+        { k: 'Status', v: d0.status === 'followup' ? 'Follow-up · ' + this.dLabel(d0.followUp, true) : 'Done' }
+      ]
+    } : {};
+    const open = id => () => this.setState({ detailId: id });
+
+    return {
+      periods: [['today','Today'],['week','7 days'],['month','Month'],['all','All']].map(([k, l]) => ({ label: l, bg: s.period === k ? '#fff' : 'transparent', fg: s.period === k ? '#16181B' : '#5D636B', shadow: s.period === k ? '0 1px 2px rgba(0,0,0,.08)' : 'none', onClick: go({ period: k }) })),
+      query: s.query, onQuery: e => this.setState({ query: e.target.value, page: 1 }),
+      updatedLabel: 'Updated ' + s.loadedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      exportCsv: () => s.view === 'schools' ? this.schoolCsv(schoolList) : this.csv(sorted),
+      kpis: [
+        { label: 'Visits', value: filtered.length, sub: periodName, color: '#16181B' },
+        { label: 'Schools covered', value: schools, sub: 'unique schools', color: '#16181B' },
+        { label: 'Students reached', value: students.toLocaleString('en-IN'), sub: 'across visited schools', color: '#16181B' },
+        { label: 'Open follow-ups', value: openFu.length, sub: 'all time', color: '#16181B' },
+        { label: 'Overdue', value: overdue.length, sub: 'follow-up date passed', color: overdue.length ? '#B3261E' : '#16181B' }
+      ],
+      zoneStats: zc.map(({ z, n }) => ({ short: z.split(' — ')[0], place: z.split(' — ')[1], count: n, pct: (n / zmax * 100) + '%', bg: s.zoneFilter === z ? '#E8F0FC' : 'transparent', onClick: go({ zoneFilter: s.zoneFilter === z ? '' : z }) })),
+      memberStats: mc.map(({ m, n, fu }) => ({ name: m, initials: this.initials(m), count: n, fu: fu || '–', fuColor: fu ? '#8A4A06' : '#B0B5BB', pct: (n / mmax * 100) + '%', bg: s.memberFilter === m ? '#E8F0FC' : 'transparent', onClick: go({ memberFilter: s.memberFilter === m ? '' : m }) })),
+      followups: fus.slice(0, 6).map(v => { const n = this.daysFrom(v.followUp); return { school: v.school, sub: v.by + ' · ' + (v.zone || '').split(' — ')[0], due: n > 0 ? n + 'd overdue' : this.dLabel(v.followUp), dueColor: n > 0 ? '#B3261E' : n === 0 ? '#8A4A06' : '#3A3F45', open: open(v.id) }; }),
+      noFollowups: fus.length === 0, fuCountLabel: fus.length + ' open' + (overdue.length ? ' · ' + overdue.length + ' overdue' : ''),
+      zones: Component.ZONES, team: names,
+      isLogin: s.screen === 'login', isDash: s.screen === 'dash', isOverview: s.view === 'overview', isMembers: s.view === 'members',
+      adminPin: s.adminPin, loginErr: s.loginErr,
+      onAdminPin: e => this.setState({ adminPin: e.target.value.replace(/\D/g, '').slice(0, 4), loginErr: '' }),
+      doLogin: e => { e && e.preventDefault && e.preventDefault(); s.adminPin === Component.ADMIN_PIN ? this.setState({ screen: 'dash', adminPin: '' }) : this.setState({ loginErr: 'Incorrect admin PIN' }); },
+      logout: go({ screen: 'login', view: 'overview', detailId: null, revealed: {}, justAdded: null }),
+      navItems: [['overview', 'Overview', ''], ['schools', 'Schools', allSchools.length], ['members', 'Members', s.team.length]].map(([k, l, c]) => ({ label: l, count: c, bg: s.view === k ? '#E8F0FC' : 'transparent', fg: s.view === k ? '#1F55B3' : '#3A3F45', weight: s.view === k ? '600' : '500', bar: s.view === k ? ACC : 'transparent', onClick: go({ view: k, detailId: null, schoolKey: null }) })),
+      isSchools: s.view === 'schools', showSearch: s.view !== 'members',
+      pageTitle: { overview: 'Overview', schools: 'Schools', members: 'Team members' }[s.view],
+      searchPlaceholder: s.view === 'schools' ? 'Search school, coordinator, phone' : 'Search school, place, person',
+      schoolKpis: [
+        { label: 'Schools', value: allSchools.length },
+        { label: 'Students', value: allSchools.reduce((n, r) => n + (+r.students || 0), 0).toLocaleString('en-IN') },
+        { label: 'Follow-up open', value: allSchools.filter(r => r.status === 'followup').length },
+        { label: 'Zones covered', value: new Set(allSchools.map(r => r.zone).filter(Boolean)).size + ' / 6' }
+      ],
+      schoolCols, schoolCountLabel: '· ' + schoolList.length + ' of ' + allSchools.length, noSchools: schoolList.length === 0,
+      hasSchoolFilters: !!(s.zoneFilter || s.statusFilter !== 'all' || q),
+      ...(() => {
+        const n = schoolList.length, pages = Math.max(1, Math.ceil(n / s.pageSize)), p = Math.min(s.page, pages), st = (p - 1) * s.pageSize;
+        this._pageSlice = [st, st + s.pageSize];
+        return {
+          pageSize: String(s.pageSize), onPageSize: e => this.setState({ pageSize: +e.target.value, page: 1 }),
+          pageRangeLabel: n ? 'Showing ' + (st + 1) + '–' + Math.min(n, st + s.pageSize) + ' of ' + n : 'No results',
+          isFirstPage: p <= 1, isLastPage: p >= pages, prevFg: p <= 1 ? '#B0B5BB' : '#16181B', nextFg: p >= pages ? '#B0B5BB' : '#16181B',
+          prevPage: () => this.setState({ page: Math.max(1, p - 1) }), nextPage: () => this.setState({ page: Math.min(pages, p + 1) }),
+          pageBtns: Array.from({ length: pages }, (_, i) => i + 1).filter(i => pages <= 7 || i === 1 || i === pages || Math.abs(i - p) <= 1).map(i => ({ label: i, bg: i === p ? '#2F6FDB' : '#fff', fg: i === p ? '#fff' : '#16181B', border: i === p ? '#2F6FDB' : '#D5D8DC', onClick: () => this.setState({ page: i }) }))
+        };
+      })(),
+      schools: schoolList.slice(...this._pageSlice).map(r => { const od = r.followUp && this.daysFrom(r.followUp) > 0; return {
+        school: r.school, location: r.location, zoneShort: (r.zone || '—').split(' — ')[0], studentsLabel: r.students ? Number(r.students).toLocaleString('en-IN') : '—',
+        coordName: r.coordName || '—', coordPhone: r.coordPhone, coordEmail: r.coordEmail || '—', visitCount: r.visitCount,
+        lastLabel: this.dLabel(r.last.date), lastBy: r.last.by, membersLabel: r.members.map(m => m.split(' ')[0]).join(', '),
+        isDone: r.status === 'done', isFollow: r.status === 'followup', followLabel: od ? 'overdue' : this.dLabel(r.followUp),
+        fuFg: od ? '#B3261E' : '#8A4A06', fuBg: od ? '#FBEDEC' : '#FCF1E3',
+        bg: s.schoolKey === r.key ? '#F4F7FD' : '#fff', open: () => this.setState({ schoolKey: r.key })
+      }; }),
+      hasSchool: !!S0, sc, closeSchool: go({ schoolKey: null }),
+      newName: s.newName, newErr: s.newErr, newBorder: s.newErr ? '#B3261E' : '#D5D8DC',
+      onNewName: e => this.setState({ newName: e.target.value, newErr: '' }),
+      addMember: this._add = () => {
+        const name = s.newName.trim().replace(/\s+/g, ' ');
+        if (!name) return this.setState({ newErr: 'Enter a name' });
+        if (s.team.some(m => m.name.toLowerCase() === name.toLowerCase())) return this.setState({ newErr: 'A member with this name already exists' });
+        const m = { id: 'm' + Date.now(), name, pin: this.genPin(s.team), added: Component.iso(new Date()) };
+        this.saveTeam([...s.team, m], { newName: '', justAdded: { name: m.name, pin: m.pin, verb: 'added' } });
+      },
+      hasJustAdded: !!s.justAdded, justAdded: s.justAdded || {}, dismissAdded: go({ justAdded: null }),
+      memberCountLabel: s.team.length + ' member' + (s.team.length === 1 ? '' : 's'),
+      members: [...s.team].sort((a, b) => a.name.localeCompare(b.name)).map(m => {
+        const vs = s.visits.filter(v => v.by === m.name), shown = !!s.revealed[m.id], confirming = s.confirmRemove === m.id;
+        return {
+          name: m.name, initials: this.initials(m.name), pin: shown ? m.pin : '••••', revealLabel: shown ? 'Hide' : 'Show',
+          visits: vs.length, last: vs.length ? this.dLabel([...vs].sort((a, b) => b.date.localeCompare(a.date))[0].date) : '—',
+          added: this.dLabel(m.added), confirming, notConfirming: !confirming,
+          toggleReveal: () => this.setState(st => ({ revealed: { ...st.revealed, [m.id]: !st.revealed[m.id] } })),
+          resetPin: () => { const pin = this.genPin(s.team, m.pin); this.saveTeam(s.team.map(x => x.id === m.id ? { ...x, pin } : x), { justAdded: { name: m.name, pin, verb: 'has a new PIN' }, revealed: { ...s.revealed, [m.id]: true } }); },
+          askRemove: go({ confirmRemove: m.id }), cancelRemove: go({ confirmRemove: null }),
+          remove: () => this.saveTeam(s.team.filter(x => x.id !== m.id), { confirmRemove: null, memberFilter: s.memberFilter === m.name ? '' : s.memberFilter })
+        };
+      }),
+      zoneFilter: s.zoneFilter, memberFilter: s.memberFilter, statusFilter: s.statusFilter,
+      onZone: e => this.setState({ zoneFilter: e.target.value, page: 1 }), onMember: e => this.setState({ memberFilter: e.target.value }), onStatus: e => this.setState({ statusFilter: e.target.value, page: 1 }),
+      hasFilters: !!(s.zoneFilter || s.memberFilter || s.statusFilter !== 'all' || q), clearFilters: go({ zoneFilter: '', memberFilter: '', statusFilter: 'all', query: '' }),
+      rowCountLabel: '· ' + sorted.length + ' of ' + inP.length,
+      cols,
+      rows: sorted.map(v => ({ ...v, dateLabel: this.dLabel(v.date), zoneShort: (v.zone || '—').split(' — ')[0], studentsLabel: v.students ? Number(v.students).toLocaleString('en-IN') : '—', isDone: v.status === 'done', isFollow: v.status === 'followup', followLabel: this.dLabel(v.followUp), bg: s.detailId === v.id ? '#F4F7FD' : '#fff', open: open(v.id) })),
+      noRows: sorted.length === 0,
+      onLoginKey: e => { if (e.key === 'Enter') (s.adminPin === Component.ADMIN_PIN ? this.setState({ screen: 'dash', adminPin: '' }) : this.setState({ loginErr: 'Incorrect admin PIN' })); },
+      onNewKey: e => { if (e.key === 'Enter') this._add && this._add(); },
+      hasDetail: !!d0, d, closeDetail: go({ detailId: null })
+    };
+  }
+}
+</script>
+</body>
+</html>

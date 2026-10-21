@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E6E7E9;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#16181B;-webkit-font-smoothing:antialiased}
+a{color:#2F6FDB;text-decoration:none}a:hover{color:#1F55B3}
+input,select,textarea,button{font-family:inherit}
+@keyframes fbspin{to{transform:rotate(360deg)}}
+@keyframes fbup{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px;box-sizing:border-box">
+<div data-screen-label="Phone" style="width:390px;height:844px;background:#F4F5F6;border-radius:44px;border:10px solid #16181B;box-shadow:0 30px 60px rgba(20,24,30,.18);overflow:hidden;position:relative;display:flex;flex-direction:column;box-sizing:content-box">
+  <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font-size:14px;font-weight:600;background:{{ statusBarBg }}">
+    <span>9:41</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5D636B">{{ netLabel }}</span>
+  </div>
+
+  <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Login" style="flex:1;display:flex;flex-direction:column;padding:48px 24px 32px;background:#FFFFFF">
+    <div style="width:44px;height:44px;border-radius:12px;background:#2F6FDB;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px">F</div>
+    <h1 style="margin:24px 0 6px;font-size:28px;font-weight:600;letter-spacing:-.01em">Fieldbook</h1>
+    <p style="margin:0 0 36px;color:#5D636B;font-size:15px;line-height:1.45;text-wrap:pretty">Log school visits from the field. Everyone on the team sees every visit.</p>
+    <label style="font-size:13px;font-weight:600;color:#3A3F45;margin-bottom:6px">Who are you?</label>
+    <select value="{{ loginName }}" onChange="{{ onLoginName }}" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 12px;font-size:16px;background:#fff;color:#16181B;margin-bottom:18px">
+      <option value="">Select your name</option>
+      <sc-for list="{{ team }}" as="m"><option value="{{ m }}">{{ m }}</option></sc-for>
+    </select>
+    <label style="font-size:13px;font-weight:600;color:#3A3F45;margin-bottom:6px">Your PIN</label>
+    <input type="password" inputMode="numeric" maxLength="4" placeholder="4 digits" value="{{ pin }}" onChange="{{ onPin }}" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 12px;font-size:18px;letter-spacing:.3em;box-sizing:border-box">
+    <sc-if value="{{ loginErr }}"><div style="color:#B3261E;font-size:13px;margin-top:8px">{{ loginErr }}</div></sc-if>
+    <div style="font-size:12px;color:#7A8088;margin-top:8px">Your admin shares your PIN. Demo: Asha Verma · 2468</div>
+    <div style="flex:1"></div>
+    <button onClick="{{ doLogin }}" style="height:52px;border:none;border-radius:12px;background:#2F6FDB;color:#fff;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#2558B0">Sign in</button>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div style="flex:none;padding:8px 20px 12px;background:#FFFFFF;border-bottom:1px solid #E2E4E7;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:22px;font-weight:600;letter-spacing:-.01em">{{ tabTitle }}</div>
+        <div style="font-size:13px;color:#5D636B">{{ todayLabel }}</div>
+      </div>
+      <button onClick="{{ toggleOnline }}" style="display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:15px;border:1px solid {{ syncBorder }};background:{{ syncBg }};color:{{ syncFg }};font-size:12px;font-weight:600;cursor:pointer">
+        <sc-if value="{{ syncing }}"><span style="width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:fbspin .8s linear infinite"></span></sc-if>
+        <sc-if value="{{ notSyncing }}"><span style="width:7px;height:7px;border-radius:50%;background:currentColor"></span></sc-if>
+        {{ syncLabel }}
+      </button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;min-height:0">
+    <sc-if value="{{ isVisitsTab }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Dashboard" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          <sc-for list="{{ counts }}" as="c" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:12px">
+              <div style="font-size:12px;color:#5D636B;font-weight:500">{{ c.label }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:24px;margin-top:4px">{{ c.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ hasFollowups }}">
+          <button onClick="{{ showFollowups }}" style="display:flex;align-items:center;justify-content:space-between;background:#FCF1E3;border:1px solid #F1DCC0;border-radius:12px;padding:12px 14px;color:#8A4A06;font-size:14px;font-weight:500;cursor:pointer;text-align:left">
+            <span>{{ followupText }}</span><span style="font-weight:600">View →</span>
+          </button>
+        </sc-if>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;display:flex;align-items:center;gap:8px;height:42px;background:#fff;border:1px solid #D5D8DC;border-radius:10px;padding:0 12px">
+            <span style="width:12px;height:12px;border:2px solid #7A8088;border-radius:50%;flex:none;box-sizing:border-box"></span>
+            <input placeholder="Search school, place, person" value="{{ query }}" onChange="{{ onQuery }}" style="flex:1;min-width:0;border:none;outline:none;font-size:15px;background:transparent">
+          </div>
+          <button onClick="{{ toggleFilters }}" style="height:42px;padding:0 14px;border-radius:10px;border:1px solid {{ filterBorder }};background:{{ filterBg }};color:{{ filterFg }};font-size:14px;font-weight:600;cursor:pointer">{{ filterBtnLabel }}</button>
+        </div>
+        <sc-if value="{{ filtersOpen }}">
+          <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Status</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ statusChips }}" as="ch">
+                <button onClick="{{ ch.onClick }}" style="height:34px;padding:0 14px;border-radius:17px;border:1px solid {{ ch.border }};background:{{ ch.bg }};color:{{ ch.fg }};font-size:14px;font-weight:500;cursor:pointer">{{ ch.label }}</button>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Visited by</div>
+            <select value="{{ memberFilter }}" onChange="{{ onMemberFilter }}" style="height:42px;border:1px solid #D5D8DC;border-radius:10px;padding:0 10px;font-size:15px;background:#fff;color:#16181B">
+              <option value="">Anyone</option>
+              <sc-for list="{{ team }}" as="m"><option value="{{ m }}">{{ m }}</option></sc-for>
+            </select>
+            <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Zone</div>
+            <select value="{{ zoneFilter }}" onChange="{{ onZoneFilter }}" style="height:42px;border:1px solid #D5D8DC;border-radius:10px;padding:0 10px;font-size:15px;background:#fff;color:#16181B">
+              <option value="">All zones</option>
+              <sc-for list="{{ zones }}" as="z"><option value="{{ z }}">{{ z }}</option></sc-for>
+            </select>
+            <sc-if value="{{ hasActiveFilters }}"><button onClick="{{ clearFilters }}" style="align-self:flex-start;border:none;background:none;color:#2F6FDB;font-size:14px;font-weight:600;padding:0;cursor:pointer">Clear filters</button></sc-if>
+          </div>
+        </sc-if>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:4px 2px 0">
+          <div style="font-size:15px;font-weight:600">Recent visits</div>
+          <div style="font-size:13px;color:#5D636B">{{ resultLabel }}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;overflow:hidden">
+          <sc-for list="{{ list }}" as="v" hint-placeholder-count="5">
+            <button onClick="{{ v.open }}" style="width:100%;display:flex;gap:12px;align-items:flex-start;padding:14px;border:none;border-bottom:1px solid #EDEEF0;background:#fff;text-align:left;cursor:pointer;color:#16181B" style-active="background:#F4F5F6">
+              <div style="width:36px;height:36px;border-radius:50%;background:#EEF0F2;color:#3A3F45;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ v.initials }}</div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;gap:8px;align-items:baseline">
+                  <div style="flex:1;min-width:0;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.school }}</div>
+                  <div style="font-size:12px;color:#5D636B;flex:none">{{ v.dateLabel }}</div>
+                </div>
+                <div style="font-size:13px;color:#5D636B;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.sub }}</div>
+                <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+                  <sc-if value="{{ v.isDone }}"><span style="font-size:12px;font-weight:600;color:#1F7A4D;background:#E5F3EC;padding:2px 8px;border-radius:6px">Done</span></sc-if>
+                  <sc-if value="{{ v.isFollow }}"><span style="font-size:12px;font-weight:600;color:#8A4A06;background:#FCF1E3;padding:2px 8px;border-radius:6px">Follow-up {{ v.followLabel }}</span></sc-if>
+                  <sc-if value="{{ v.pending }}"><span style="font-size:12px;font-weight:600;color:#5D636B;background:#EEF0F2;padding:2px 8px;border-radius:6px">Not synced</span></sc-if>
+                </div>
+              </div>
+            </button>
+          </sc-for>
+          <sc-if value="{{ isEmpty }}"><div style="padding:32px 16px;text-align:center;color:#5D636B;font-size:14px">No visits match.</div></sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isTeamTab }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Team stats" style="padding:16px 16px 100px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;background:#E9EBED;border-radius:10px;padding:3px">
+          <sc-for list="{{ periodTabs }}" as="p">
+            <button onClick="{{ p.onClick }}" style="flex:1;height:32px;border:none;border-radius:8px;background:{{ p.bg }};color:{{ p.fg }};box-shadow:{{ p.shadow }};font-size:14px;font-weight:500;cursor:pointer">{{ p.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px">
+          <div style="font-size:15px;font-weight:600">Visits by member</div>
+          <div style="font-size:13px;color:#5D636B">{{ teamTotalLabel }}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;overflow:hidden">
+          <sc-for list="{{ teamStats }}" as="t" hint-placeholder-count="6">
+            <button onClick="{{ t.open }}" style="width:100%;display:flex;gap:12px;align-items:center;padding:12px 14px;border:none;border-bottom:1px solid #EDEEF0;background:#fff;text-align:left;cursor:pointer;color:#16181B" style-active="background:#F4F5F6">
+              <div style="width:32px;height:32px;border-radius:50%;background:#EEF0F2;color:#3A3F45;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ t.initials }}</div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="font-size:14px;font-weight:500">{{ t.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:14px">{{ t.count }}</span>
+                </div>
+                <div style="height:6px;background:#EEF0F2;border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:{{ t.pct }};background:#2F6FDB;border-radius:3px"></div></div>
+                <div style="font-size:12px;color:#7A8088;margin-top:4px">{{ t.meta }}</div>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:12px 14px">
+          <div><div style="font-size:12px;color:#5D636B">Signed in as</div><div style="font-size:15px;font-weight:600">{{ user }}</div></div>
+          <button onClick="{{ logout }}" style="border:1px solid #D5D8DC;background:#fff;border-radius:8px;height:34px;padding:0 12px;font-size:14px;font-weight:500;cursor:pointer;color:#16181B">Sign out</button>
+        </div>
+      </div>
+    </sc-if>
+    </div>
+
+    <button onClick="{{ newVisit }}" style="position:absolute;right:20px;bottom:96px;height:52px;padding:0 20px;border:none;border-radius:26px;background:#2F6FDB;color:#fff;font-size:16px;font-weight:600;box-shadow:0 6px 16px rgba(47,111,219,.35);cursor:pointer;display:flex;align-items:center;gap:8px" style-active="background:#2558B0"><span style="font-size:22px;line-height:1;font-weight:400">+</span>New visit</button>
+    <div style="flex:none;height:76px;background:#fff;border-top:1px solid #E2E4E7;display:flex;padding-bottom:12px;box-sizing:border-box">
+      <sc-for list="{{ tabs }}" as="tb">
+        <button onClick="{{ tb.onClick }}" style="flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:{{ tb.fg }};font-size:12px;font-weight:600;cursor:pointer">
+          <span style="width:22px;height:4px;border-radius:2px;background:{{ tb.bar }}"></span>{{ tb.label }}
+        </button>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isForm }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="New visit" style="flex:1;display:flex;flex-direction:column;min-height:0;background:#fff">
+    <div style="flex:none;padding:6px 16px 14px;border-bottom:1px solid #E2E4E7">
+      <div style="display:flex;align-items:center;justify-content:space-between;height:36px">
+        <button onClick="{{ cancelForm }}" style="border:none;background:none;color:#2F6FDB;font-size:16px;padding:0;cursor:pointer">Cancel</button>
+        <div style="font-size:16px;font-weight:600">New visit</div>
+        <div style="font-size:13px;color:#5D636B;width:52px;text-align:right">{{ stepCount }}</div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:10px">
+        <sc-for list="{{ stepBars }}" as="sb"><div style="flex:1;height:4px;border-radius:2px;background:{{ sb.bg }}"></div></sc-for>
+      </div>
+      <div style="font-size:20px;font-weight:600;margin-top:14px">{{ stepTitle }}</div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ step0 }}">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">School name *</label>
+          <input value="{{ draft.school }}" onChange="{{ set.school }}" placeholder="e.g. Govt. Higher Secondary School" style="height:48px;border:1px solid {{ errBorder.school }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.school }}"><div style="color:#B3261E;font-size:13px">{{ err.school }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Location *</label>
+          <input value="{{ draft.location }}" onChange="{{ set.location }}" placeholder="Area, town / district" style="height:48px;border:1px solid {{ errBorder.location }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.location }}"><div style="color:#B3261E;font-size:13px">{{ err.location }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Zone *</label>
+          <select value="{{ draft.zone }}" onChange="{{ set.zone }}" style="height:48px;border:1px solid {{ errBorder.zone }};border-radius:10px;padding:0 10px;font-size:16px;background:#fff;color:#16181B">
+            <option value="">Select zone</option>
+            <sc-for list="{{ zones }}" as="z"><option value="{{ z }}">{{ z }}</option></sc-for>
+          </select>
+          <sc-if value="{{ err.zone }}"><div style="color:#B3261E;font-size:13px">{{ err.zone }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <label style="font-size:13px;font-weight:600;color:#3A3F45">Students per class</label>
+            <span style="font-size:13px;color:#5D636B">Total <span style="font-family:'IBM Plex Mono',monospace;color:#16181B;font-weight:500">{{ classTotal }}</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+            <sc-for list="{{ classInputs }}" as="ci" hint-placeholder-count="14">
+              <div style="display:flex;flex-direction:column;gap:3px">
+                <span style="font-size:11px;color:#5D636B;font-weight:500">{{ ci.label }}</span>
+                <input inputMode="numeric" value="{{ ci.value }}" onChange="{{ ci.onChange }}" placeholder="0" style="height:44px;width:100%;border:1px solid #D5D8DC;border-radius:8px;padding:0 8px;font-size:16px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box">
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;color:#7A8088">Leave blank for classes the school doesn't have.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ step1 }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:13px;font-weight:600;color:#3A3F45">Date *</label>
+            <input type="date" value="{{ draft.date }}" onChange="{{ set.date }}" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 10px;font-size:15px;box-sizing:border-box;background:#fff;width:100%">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:13px;font-weight:600;color:#3A3F45">Time</label>
+            <input type="time" value="{{ draft.time }}" onChange="{{ set.time }}" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 10px;font-size:15px;box-sizing:border-box;background:#fff;width:100%">
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Visited by *</label>
+          <select value="{{ draft.by }}" onChange="{{ set.by }}" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 10px;font-size:16px;background:#fff;color:#16181B">
+            <sc-for list="{{ team }}" as="m"><option value="{{ m }}">{{ m }}</option></sc-for>
+          </select>
+          <div style="font-size:12px;color:#7A8088">Defaults to you. Change it if you're entering for a teammate.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ step2 }}">
+        <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Met with</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Name *</label>
+          <input value="{{ draft.metName }}" onChange="{{ set.metName }}" placeholder="Who you met" style="height:48px;border:1px solid {{ errBorder.metName }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.metName }}"><div style="color:#B3261E;font-size:13px">{{ err.metName }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Role</label>
+          <input value="{{ draft.metRole }}" onChange="{{ set.metRole }}" placeholder="e.g. Principal, Teacher" style="height:48px;border:1px solid #D5D8DC;border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+        </div>
+        <div style="height:1px;background:#EDEEF0;margin:4px 0"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">School coordinator</div>
+          <button onClick="{{ copyMet }}" style="border:none;background:none;color:#2F6FDB;font-size:13px;font-weight:600;padding:0;cursor:pointer">Same as met</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Coordinator name *</label>
+          <input value="{{ draft.coordName }}" onChange="{{ set.coordName }}" placeholder="Point of contact at school" style="height:48px;border:1px solid {{ errBorder.coordName }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.coordName }}"><div style="color:#B3261E;font-size:13px">{{ err.coordName }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Phone</label>
+          <input type="tel" inputMode="tel" value="{{ draft.coordPhone }}" onChange="{{ set.coordPhone }}" placeholder="+91" style="height:48px;border:1px solid {{ errBorder.coordPhone }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.coordPhone }}"><div style="color:#B3261E;font-size:13px">{{ err.coordPhone }}</div></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Email</label>
+          <input type="email" inputMode="email" value="{{ draft.coordEmail }}" onChange="{{ set.coordEmail }}" placeholder="name@school.edu" style="height:48px;border:1px solid {{ errBorder.coordEmail }};border-radius:10px;padding:0 12px;font-size:16px;box-sizing:border-box">
+          <sc-if value="{{ err.coordEmail }}"><div style="color:#B3261E;font-size:13px">{{ err.coordEmail }}</div></sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ step3 }}">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Notes / outcome</label>
+          <textarea value="{{ draft.notes }}" onChange="{{ set.notes }}" placeholder="What was discussed, agreed, next steps" rows="5" style="border:1px solid #D5D8DC;border-radius:10px;padding:12px;font-size:16px;line-height:1.4;resize:none;box-sizing:border-box"></textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="font-size:13px;font-weight:600;color:#3A3F45">Visit status *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <button onClick="{{ setDone }}" style="height:56px;border-radius:10px;border:{{ doneBorder }};background:{{ doneBg }};color:#16181B;font-size:15px;font-weight:600;cursor:pointer">Done</button>
+            <button onClick="{{ setFollow }}" style="height:56px;border-radius:10px;border:{{ followBorder }};background:{{ followBg }};color:#16181B;font-size:15px;font-weight:600;cursor:pointer">Follow-up needed</button>
+          </div>
+        </div>
+        <sc-if value="{{ isFollowDraft }}">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:13px;font-weight:600;color:#3A3F45">Follow-up date *</label>
+            <input type="date" value="{{ draft.followUp }}" onChange="{{ set.followUp }}" style="height:48px;border:1px solid {{ errBorder.followUp }};border-radius:10px;padding:0 10px;font-size:15px;box-sizing:border-box;background:#fff">
+            <sc-if value="{{ err.followUp }}"><div style="color:#B3261E;font-size:13px">{{ err.followUp }}</div></sc-if>
+          </div>
+        </sc-if>
+        <div style="background:#F4F5F6;border-radius:10px;padding:12px 14px;font-size:13px;color:#3A3F45;line-height:1.5">
+          <div style="font-weight:600;margin-bottom:2px">{{ draft.school }}</div>
+          <div>{{ reviewLine }}</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:none;display:flex;gap:10px;padding:12px 16px 28px;border-top:1px solid #E2E4E7;background:#fff">
+      <sc-if value="{{ canBack }}"><button onClick="{{ back }}" style="height:52px;padding:0 22px;border-radius:12px;border:1px solid #D5D8DC;background:#fff;font-size:16px;font-weight:600;color:#16181B;cursor:pointer">Back</button></sc-if>
+      <button onClick="{{ next }}" style="flex:1;height:52px;border:none;border-radius:12px;background:#2F6FDB;color:#fff;font-size:16px;font-weight:600;cursor:pointer" style-active="background:#2558B0">{{ nextLabel }}</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Visit detail" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div style="flex:none;padding:6px 16px 14px;background:#fff;border-bottom:1px solid #E2E4E7">
+      <button onClick="{{ goHome }}" style="border:none;background:none;color:#2F6FDB;font-size:16px;padding:0;height:36px;cursor:pointer">← Visits</button>
+      <div style="font-size:22px;font-weight:600;letter-spacing:-.01em;line-height:1.2;text-wrap:pretty">{{ d.school }}</div>
+      <div style="font-size:14px;color:#5D636B;margin-top:4px">{{ d.location }}</div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <sc-if value="{{ d.isDone }}"><span style="font-size:12px;font-weight:600;color:#1F7A4D;background:#E5F3EC;padding:3px 8px;border-radius:6px">Done</span></sc-if>
+        <sc-if value="{{ d.isFollow }}"><span style="font-size:12px;font-weight:600;color:#8A4A06;background:#FCF1E3;padding:3px 8px;border-radius:6px">Follow-up {{ d.followLabel }}</span></sc-if>
+        <sc-if value="{{ d.pending }}"><span style="font-size:12px;font-weight:600;color:#5D636B;background:#EEF0F2;padding:3px 8px;border-radius:6px">Not synced</span></sc-if>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+      <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px">
+        <sc-for list="{{ d.rows }}" as="r">
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid #EDEEF0;font-size:14px">
+            <span style="color:#5D636B">{{ r.k }}</span><span style="font-weight:500;text-align:right">{{ r.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ d.hasClasses }}">
+      <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Students per class</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px">
+          <sc-for list="{{ d.classRows }}" as="cr">
+            <div style="background:#F4F5F6;border-radius:8px;padding:6px 8px">
+              <div style="font-size:11px;color:#5D636B">{{ cr.k }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:15px">{{ cr.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+      <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">School coordinator</div>
+        <div style="font-size:16px;font-weight:600;margin-top:6px">{{ d.coordName }}</div>
+        <div style="font-size:14px;color:#5D636B;margin-top:2px">{{ d.coordContact }}</div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <a href="{{ d.tel }}" style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid #D5D8DC;border-radius:10px;font-size:14px;font-weight:600;color:#16181B">Call</a>
+          <a href="{{ d.mail }}" style="flex:1;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid #D5D8DC;border-radius:10px;font-size:14px;font-weight:600;color:#16181B">Email</a>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #E2E4E7;border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:600;color:#5D636B;text-transform:uppercase;letter-spacing:.04em">Notes / outcome</div>
+        <div style="font-size:15px;line-height:1.5;margin-top:6px;white-space:pre-wrap;text-wrap:pretty">{{ d.notes }}</div>
+      </div>
+      <sc-if value="{{ d.isFollow }}">
+        <button onClick="{{ markDone }}" style="height:50px;border:none;border-radius:12px;background:#2F6FDB;color:#fff;font-size:16px;font-weight:600;cursor:pointer">Mark follow-up done</button>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}">
+    <div style="position:absolute;left:50%;bottom:170px;transform:translateX(-50%);background:#16181B;color:#fff;font-size:14px;font-weight:500;padding:10px 16px;border-radius:10px;white-space:nowrap;animation:fbup .2s ease-out">{{ toast }}</div>
+  </sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;login&quot;,&quot;home&quot;],&quot;default&quot;:&quot;login&quot;,&quot;tsType&quot;:&quot;'home'|'login'&quot;},&quot;startOffline&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  static TEAM = ['Asha Verma','Rahul Nair','Priya Singh','Kabir Shah','Meera Iyer','Arjun Rao','Neha Gupta','Vikram Das'];
+  static KEY = 'fieldbook-visits-v2';
+  static TKEY = 'fieldbook-team-v1';
+  static SEED_PINS = ['2468','1357','8024','5791','3146','6620','9083','4419'];
+  static loadTeam() { try { const t = JSON.parse(localStorage.getItem(Component.TKEY)); if (t && t.length) return t; } catch (e) {} return Component.TEAM.map((name, i) => ({ id: 'm' + (i + 1), name, pin: Component.SEED_PINS[i] })); }
+  static ZONES = ['Zone 1 — Nagercoil','Zone 2 — Thovalai','Zone 3 — Thuckalay','Zone 4 — Marthandam','Zone 5 — Kulasekaram','Zone 6 — Kanyakumari'];
+  static CLASSES = ['LKG','UKG','1','2','3','4','5','6','7','8','9','10','11','12'];
+  static iso(d) { const z = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); }
+  static ago(n) { const d = new Date(); d.setDate(d.getDate() - n); return Component.iso(d); }
+  static seed() {
+    const a = Component.ago, T = Component.TEAM;
+    const rows = [
+      [0,'10:30','Govt. Higher Secondary School, Vadasery','Vadasery, Nagercoil',1,840,T[0],'Mrs. Kavitha R.','Headmistress','Mr. Suresh Kumar','+91 98110 22341','suresh.k@ghssvadasery.edu','Demoed the reading kit to Class 4 teachers. HM keen to pilot in two sections from November.','followup',a(-7)],
+      [0,'09:15','St. Xavier\'s Primary School','Kottar, Nagercoil',1,520,T[1],'Fr. Thomas','Headmaster','Ms. Ritu Jebaraj','+91 94140 55120','ritu.j@sxp.org','Signed MoU. Kits to be delivered by 2 Nov.','done',''],
+      [1,'14:00','Govt. High School, Thovalai','Thovalai',2,610,T[2],'Mr. Anil Joseph','Assistant HM','Mr. Anil Joseph','+91 98220 11873','anil.j@ghsthovalai.in','Teacher training scheduled for Saturday. Need projector confirmation.','followup',a(-3)],
+      [1,'11:20','Sunrise Matriculation School','Aralvaimozhi',2,650,T[3],'Ms. Deepa Kumari','Coordinator','Ms. Deepa Kumari','+91 99000 43210','deepa@sunrise.edu.in','Baseline assessment completed for 3 classes.','done',''],
+      [2,'10:00','Panchayat Union Primary School','Thuckalay',3,310,T[2],'Mr. Ganesan P.','Head Teacher','Mrs. Sunitha M.','+91 97650 88213','','Low attendance this week. Revisit after Deepavali.','followup',a(-12)],
+      [3,'12:45','Infant Jesus Hr. Sec. School','Mulagumoodu, Thuckalay',3,2100,T[0],'Dr. Neela S.','Principal','Mr. Rohan Raj','+91 98100 77651','r.raj@ijhss.edu','Shared impact report; management review pending.','followup',a(-5)],
+      [4,'09:40','Govt. Girls Hr. Sec. School','Marthandam',4,980,T[4],'Mrs. Usha B.','Headmistress','Ms. Pooja Anand','+91 98731 66420','pooja.a@ggsss.in','Library corner set up. Photos shared on group.','done',''],
+      [5,'15:10','Holy Cross Convent School','Kuzhithurai, Marthandam',4,760,T[5],'Sr. Maria','Principal','Mr. Ivan D\'Cruz','+91 98200 31457','ivan@holycross.edu','Introductory meeting. Sent brochure and pricing.','done',''],
+      [6,'11:00','Govt. High School, Kulasekaram','Kulasekaram',5,540,T[6],'Mr. Subramanian G.','Headmaster','Mr. Subramanian G.','+91 94330 12598','subbu@ghskulasekaram.in','Completed term-1 review. Scores up 12% vs baseline.','done',''],
+      [8,'10:15','Little Flower Matric School','Thiruvattar, Kulasekaram',5,430,T[3],'Ms. Lakshmi Iyer','Academic Head','Ms. Lakshmi Iyer','+91 98410 20984','lakshmi@lfs.edu.in','Requested Tamil-medium materials.','followup',a(-2)],
+      [10,'13:30','Govt. Hr. Sec. School, Kanyakumari','Kanyakumari',6,690,T[7],'Mr. Ramesh R.','Headmaster','Mrs. Swathi R.','+91 99490 61732','','Monitoring visit. All sections on schedule.','done',''],
+      [13,'10:50','St. Antony\'s Hr. Sec. School','Agastheeswaram, Kanyakumari',6,1500,T[4],'Mr. Sharma','Principal','Ms. Anjali V.','+91 98110 90012','anjali.v@stantonys.edu','Renewal discussion for next academic year.','done',''],
+      [16,'09:30','Sacred Heart School','Colachel, Thuckalay',3,820,T[1],'Sr. Annie','Principal','Mr. Joseph K.','+91 94470 55618','joseph@shscolachel.in','Teacher feedback session. Collected 24 forms.','done',''],
+      [21,'14:20','Panchayat Union Middle School','Suchindram, Thovalai',2,460,T[5],'Mrs. Shaila','Head Teacher','Mr. Salim S.','+91 98920 40871','','Space constraints; proposed after-school slot.','done','']
+    ];
+    const split = (tot, i) => { const n = tot > 900 ? 14 : 8, w = Component.CLASSES.slice(0, n).map((_, j) => 1 + ((i * 7 + j * 3) % 5) / 10), sw = w.reduce((a, b) => a + b, 0), o = {}; let left = tot; w.forEach((x, j) => { const c = j === n - 1 ? left : Math.round(tot * x / sw); o[Component.CLASSES[j]] = String(c); left -= c; }); return o; };
+    return rows.map((r, i) => ({ id: 'v' + (i + 1), date: a(r[0]), time: r[1], school: r[2], location: r[3], zone: Component.ZONES[r[4] - 1], classCounts: split(r[5], i), students: String(r[5]), by: r[6], metName: r[7], metRole: r[8], coordName: r[9], coordPhone: r[10], coordEmail: r[11], notes: r[12], status: r[13], followUp: r[14], pending: false }));
+  }
+
+  constructor(props) {
+    super(props);
+    let visits = null;
+    try { visits = JSON.parse(localStorage.getItem(Component.KEY)); } catch (e) {}
+    const start = props.startScreen ?? 'login';
+    this.state = {
+      screen: start === 'login' ? 'login' : 'home', members: Component.loadTeam(), user: 'Asha Verma', loginName: '', pin: '', loginErr: '',
+      tab: 'visits', period: 'month', visits: visits && visits.length ? visits : Component.seed(),
+      query: '', statusFilter: 'all', memberFilter: '', zoneFilter: '', filtersOpen: false,
+      step: 0, draft: {}, err: {}, detailId: null, online: !(props.startOffline ?? false), syncing: false, toast: ''
+    };
+  }
+  persist(visits) { try { localStorage.setItem(Component.KEY, JSON.stringify(visits)); } catch (e) {} }
+  setVisits(fn, cb) { this.setState(s => { const v = fn(s.visits); this.persist(v); return { visits: v }; }, cb); }
+  flash(msg) { clearTimeout(this._t); this.setState({ toast: msg }); this._t = setTimeout(() => this.setState({ toast: '' }), 2200); }
+  sync() {
+    if (!this.state.visits.some(v => v.pending)) return;
+    this.setState({ syncing: true });
+    clearTimeout(this._s);
+    this._s = setTimeout(() => {
+      if (!this.state.online) return this.setState({ syncing: false });
+      this.setVisits(vs => vs.map(v => ({ ...v, pending: false })));
+      this.setState({ syncing: false });
+      this.flash('All visits synced');
+    }, 1400);
+  }
+  componentDidMount() { this._st = e => { if (e.key === Component.TKEY) this.setState({ members: Component.loadTeam() }); }; window.addEventListener('storage', this._st); }
+  componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._s); window.removeEventListener('storage', this._st); }
+
+  initials(n) { return n.replace(/^(Mr|Mrs|Ms|Dr|Fr|Sr|Col)\.?\s*/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
+  dLabel(iso, long) {
+    if (!iso) return '';
+    const today = Component.iso(new Date()), y = Component.ago(1), t = Component.ago(-1);
+    if (iso === today) return 'Today';
+    if (iso === y) return 'Yesterday';
+    if (iso === t) return 'Tomorrow';
+    const d = new Date(iso + 'T00:00');
+    return d.toLocaleDateString('en-GB', long ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' });
+  }
+  daysFrom(iso) { return Math.round((new Date(Component.iso(new Date()) + 'T00:00') - new Date(iso + 'T00:00')) / 864e5); }
+  inPeriod(v, p) {
+    const n = this.daysFrom(v.date);
+    if (p === 'today') return n === 0;
+    if (p === 'week') return n >= 0 && n < 7;
+    const d = new Date(v.date + 'T00:00'), now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }
+  validate(step, d) {
+    const e = {};
+    if (step === 0) { if (!d.school?.trim()) e.school = 'Enter the school name'; if (!d.location?.trim()) e.location = 'Enter a location'; if (!d.zone) e.zone = 'Select a zone'; }
+    if (step === 2) {
+      if (!d.metName?.trim()) e.metName = 'Who did you meet?';
+      if (!d.coordName?.trim()) e.coordName = 'Add the coordinating person';
+      if (d.coordPhone && d.coordPhone.replace(/\D/g, '').length < 10) e.coordPhone = 'Phone looks too short';
+      if (d.coordEmail && !/^\S+@\S+\.\S+$/.test(d.coordEmail)) e.coordEmail = 'Check the email address';
+    }
+    if (step === 3 && d.status === 'followup' && !d.followUp) e.followUp = 'Pick a follow-up date';
+    return e;
+  }
+
+  renderVals() {
+    const s = this.state, T = s.members.map(m => m.name), ACC = '#2F6FDB';
+    const go = patch => () => this.setState(patch);
+    const visits = [...s.visits].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+    const q = s.query.trim().toLowerCase();
+    const filtered = visits.filter(v =>
+      (s.statusFilter === 'all' || v.status === s.statusFilter) &&
+      (!s.memberFilter || v.by === s.memberFilter) &&
+      (!s.zoneFilter || v.zone === s.zoneFilter) &&
+      (!q || [v.school, v.location, v.zone || '', v.by, v.metName, v.coordName].join(' ').toLowerCase().includes(q)));
+    const followups = visits.filter(v => v.status === 'followup');
+    const activeCount = (s.statusFilter !== 'all' ? 1 : 0) + (s.memberFilter ? 1 : 0) + (s.zoneFilter ? 1 : 0);
+    const pending = s.visits.filter(v => v.pending).length;
+
+    const list = filtered.map(v => ({
+      ...v, initials: this.initials(v.by), dateLabel: this.dLabel(v.date), sub: (v.zone ? v.zone.split(' — ')[0] + ' · ' : '') + v.location + ' · ' + v.by.split(' ')[0],
+      isDone: v.status === 'done', isFollow: v.status === 'followup', followLabel: this.dLabel(v.followUp),
+      open: () => this.setState({ screen: 'detail', detailId: v.id })
+    }));
+
+    const stats = T.map(name => {
+      const mine = visits.filter(v => v.by === name);
+      const inP = mine.filter(v => this.inPeriod(v, s.period));
+      return { name, count: inP.length, last: mine[0], fu: mine.filter(v => v.status === 'followup').length };
+    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const max = Math.max(1, ...stats.map(x => x.count));
+    const teamStats = stats.map(x => ({
+      name: x.name, initials: this.initials(x.name), count: x.count, pct: (x.count / max * 100) + '%',
+      meta: (x.last ? 'Last visit ' + this.dLabel(x.last.date).toLowerCase().replace(/^(\d)/, '$1') : 'No visits yet') + (x.fu ? ' · ' + x.fu + ' open follow-up' + (x.fu > 1 ? 's' : '') : ''),
+      open: () => this.setState({ tab: 'visits', memberFilter: x.name, filtersOpen: true })
+    }));
+    const teamTotal = stats.reduce((n, x) => n + x.count, 0);
+
+    const d0 = s.visits.find(v => v.id === s.detailId);
+    const d = d0 ? {
+      ...d0, isDone: d0.status === 'done', isFollow: d0.status === 'followup', followLabel: this.dLabel(d0.followUp),
+      notes: d0.notes || 'No notes added.',
+      hasClasses: Object.values(d0.classCounts || {}).some(x => +x),
+      classRows: Component.CLASSES.filter(c => +(d0.classCounts || {})[c]).map(c => ({ k: /^\d/.test(c) ? 'Class ' + c : c, v: d0.classCounts[c] })),
+      coordContact: [d0.coordPhone, d0.coordEmail].filter(Boolean).join(' · ') || 'No contact details',
+      tel: d0.coordPhone ? 'tel:' + d0.coordPhone.replace(/\s/g, '') : '#', mail: d0.coordEmail ? 'mailto:' + d0.coordEmail : '#',
+      rows: [
+        { k: 'Zone', v: d0.zone || '—' },
+        { k: 'Date', v: this.dLabel(d0.date, true) + (d0.time ? ', ' + d0.time : '') },
+        { k: 'Visited by', v: d0.by },
+        { k: 'Met with', v: d0.metName + (d0.metRole ? ' (' + d0.metRole + ')' : '') },
+        { k: 'Students', v: d0.students ? Number(d0.students).toLocaleString('en-IN') : '—' }
+      ]
+    } : {};
+
+    const dr = s.draft, step = s.step;
+    const set = {};
+    ['school','location','zone','date','time','by','metName','metRole','coordName','coordPhone','coordEmail','notes','followUp'].forEach(k => {
+      set[k] = e => { const val = e.target.value; this.setState(st => ({ draft: { ...st.draft, [k]: val }, err: { ...st.err, [k]: '' } })); };
+    });
+    const errBorder = {};
+    ['school','location','zone','metName','coordName','coordPhone','coordEmail','followUp'].forEach(k => errBorder[k] = s.err[k] ? '#B3261E' : '#D5D8DC');
+    const titles = ['School', 'Visit', 'People', 'Outcome'];
+    const cc = dr.classCounts || {};
+    const classTotal = Component.CLASSES.reduce((n, c) => n + (parseInt(cc[c], 10) || 0), 0);
+    const classInputs = Component.CLASSES.map(c => ({ label: /^\d/.test(c) ? 'Class ' + c : c, value: cc[c] || '', onChange: e => { const val = e.target.value.replace(/\D/g, '').slice(0, 4); this.setState(st => ({ draft: { ...st.draft, classCounts: { ...(st.draft.classCounts || {}), [c]: val } } })); } }));
+    const save = () => {
+      const v = { ...dr, students: classTotal ? String(classTotal) : '', id: 'v' + Date.now(), followUp: dr.status === 'followup' ? dr.followUp : '', pending: true };
+      this.setVisits(vs => [v, ...vs], () => { if (this.state.online) this.sync(); });
+      this.setState({ screen: 'home', tab: 'visits', step: 0, draft: {}, err: {} });
+      this.flash(s.online ? 'Visit saved' : 'Saved offline · will sync later');
+    };
+
+    const net = s.online ? (s.syncing ? 'Syncing' : 'Online') : 'Offline';
+    return {
+      team: T, user: s.user, netLabel: net === 'Offline' ? 'No signal' : '5G',
+      statusBarBg: s.screen === 'home' || s.screen === 'detail' || s.screen === 'form' || s.screen === 'login' ? '#FFFFFF' : '#F4F5F6',
+      isLogin: s.screen === 'login', isHome: s.screen === 'home', isForm: s.screen === 'form', isDetail: s.screen === 'detail',
+      loginName: s.loginName, pin: s.pin, loginErr: s.loginErr,
+      onLoginName: e => this.setState({ loginName: e.target.value, loginErr: '' }),
+      onPin: e => this.setState({ pin: e.target.value.replace(/\D/g, '').slice(0, 4), loginErr: '' }),
+      doLogin: () => {
+        if (!s.loginName) return this.setState({ loginErr: 'Select your name' });
+        if (s.pin.length !== 4) return this.setState({ loginErr: 'Enter your 4-digit PIN' });
+        const mem = s.members.find(m => m.name === s.loginName);
+        if (!mem || mem.pin !== s.pin) return this.setState({ loginErr: 'Incorrect PIN. Ask your admin to reset it.', pin: '' });
+        this.setState({ screen: 'home', user: s.loginName, pin: '', tab: 'visits' });
+      },
+      logout: () => this.setState({ screen: 'login', loginName: '', pin: '' }),
+
+      tabTitle: s.tab === 'visits' ? 'Team visits' : 'Team',
+      todayLabel: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
+      syncing: s.syncing, notSyncing: !s.syncing,
+      syncLabel: !s.online ? 'Offline' + (pending ? ' · ' + pending + ' queued' : '') : s.syncing ? 'Syncing ' + pending : 'Synced',
+      syncBg: s.online ? '#E5F3EC' : '#EEF0F2', syncFg: s.online ? '#1F7A4D' : '#3A3F45', syncBorder: s.online ? '#CBE6D7' : '#D5D8DC',
+      toggleOnline: () => { const on = !s.online; this.setState({ online: on }, () => on ? this.sync() : this.flash('Offline mode · visits save on device')); },
+
+      isVisitsTab: s.tab === 'visits', isTeamTab: s.tab === 'team',
+      tabs: [['visits', 'Visits'], ['team', 'Team']].map(([k, l]) => ({ label: l, fg: s.tab === k ? ACC : '#7A8088', bar: s.tab === k ? ACC : 'transparent', onClick: go({ tab: k }) })),
+      counts: [['Today', 'today'], ['This week', 'week'], ['This month', 'month']].map(([label, p]) => ({ label, value: visits.filter(v => this.inPeriod(v, p)).length })),
+      hasFollowups: followups.length > 0,
+      followupText: followups.length + ' school' + (followups.length > 1 ? 's' : '') + ' need a follow-up',
+      showFollowups: go({ statusFilter: 'followup', filtersOpen: true, query: '' }),
+      query: s.query, onQuery: e => this.setState({ query: e.target.value }),
+      filtersOpen: s.filtersOpen, toggleFilters: go({ filtersOpen: !s.filtersOpen }),
+      filterBtnLabel: activeCount ? 'Filters · ' + activeCount : 'Filters',
+      filterBg: activeCount ? '#E8F0FC' : '#fff', filterFg: activeCount ? ACC : '#16181B', filterBorder: activeCount ? '#C3D6F5' : '#D5D8DC',
+      statusChips: [['all', 'All'], ['done', 'Done'], ['followup', 'Follow-up']].map(([k, l]) => ({
+        label: l, bg: s.statusFilter === k ? ACC : '#fff', fg: s.statusFilter === k ? '#fff' : '#16181B', border: s.statusFilter === k ? ACC : '#D5D8DC', onClick: go({ statusFilter: k })
+      })),
+      memberFilter: s.memberFilter, onMemberFilter: e => this.setState({ memberFilter: e.target.value }),
+      hasActiveFilters: activeCount > 0, clearFilters: go({ statusFilter: 'all', memberFilter: '', zoneFilter: '' }),
+      zones: Component.ZONES, zoneFilter: s.zoneFilter, onZoneFilter: e => this.setState({ zoneFilter: e.target.value }),
+      resultLabel: filtered.length + ' of ' + visits.length, list, isEmpty: list.length === 0,
+
+      periodTabs: [['today', 'Today'], ['week', 'Week'], ['month', 'Month']].map(([k, l]) => ({
+        label: l, bg: s.period === k ? '#fff' : 'transparent', fg: s.period === k ? '#16181B' : '#5D636B', shadow: s.period === k ? '0 1px 2px rgba(0,0,0,.08)' : 'none', onClick: go({ period: k })
+      })),
+      teamStats, teamTotalLabel: teamTotal + ' visit' + (teamTotal === 1 ? '' : 's') + ' total',
+
+      newVisit: go({ screen: 'form', step: 0, err: {}, draft: { date: Component.iso(new Date()), time: new Date().toTimeString().slice(0, 5), by: s.user, status: 'done' } }),
+      cancelForm: go({ screen: 'home', draft: {}, err: {}, step: 0 }),
+      draft: dr, set, err: s.err, errBorder,
+      step0: step === 0, step1: step === 1, step2: step === 2, step3: step === 3,
+      classInputs, classTotal: classTotal.toLocaleString('en-IN'),
+      stepCount: (step + 1) + ' of 4', stepTitle: titles[step],
+      stepBars: titles.map((_, i) => ({ bg: i <= step ? ACC : '#E2E4E7' })),
+      canBack: step > 0, back: go({ step: step - 1, err: {} }),
+      nextLabel: step === 3 ? (s.online ? 'Save visit' : 'Save offline') : 'Next',
+      next: () => {
+        const e = this.validate(step, dr);
+        if (Object.keys(e).length) return this.setState({ err: e });
+        step === 3 ? save() : this.setState({ step: step + 1, err: {} });
+      },
+      copyMet: () => this.setState(st => ({ draft: { ...st.draft, coordName: st.draft.metName || '' }, err: { ...st.err, coordName: '' } })),
+      setDone: () => this.setState(st => ({ draft: { ...st.draft, status: 'done' } })),
+      setFollow: () => this.setState(st => ({ draft: { ...st.draft, status: 'followup', followUp: st.draft.followUp || Component.ago(-7) } })),
+      isFollowDraft: dr.status === 'followup',
+      doneBg: dr.status === 'done' ? '#E8F0FC' : '#fff', doneBorder: dr.status === 'done' ? '2px solid ' + ACC : '1px solid #D5D8DC',
+      followBg: dr.status === 'followup' ? '#E8F0FC' : '#fff', followBorder: dr.status === 'followup' ? '2px solid ' + ACC : '1px solid #D5D8DC',
+      reviewLine: [dr.zone && dr.zone.split(' — ')[0], dr.location, this.dLabel(dr.date), dr.by, dr.metName && 'met ' + dr.metName].filter(Boolean).join(' · '),
+
+      d, goHome: go({ screen: 'home' }),
+      markDone: () => { const id = s.detailId; this.setVisits(vs => vs.map(v => v.id === id ? { ...v, status: 'done', followUp: '', pending: true } : v), () => { if (this.state.online) this.sync(); }); this.flash('Marked as done'); },
+      toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>
