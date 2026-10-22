@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Period, Visit } from '../../shared/domain';
-import { CLASSES, ZONES, ago, classLabel, dLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
-import { classRows } from '../lib/schools';
+import { ZONES, ago, dLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
 import { useFieldStore } from './useFieldStore';
 import '../styles/field.css';
 
 type Screen = { name: 'home' } | { name: 'form' } | { name: 'detail'; id: string };
-type Draft = Partial<Visit> & { classCounts?: Record<string, string> };
+type Draft = Partial<Visit>;
 
 export default function FieldApp() {
   const [toast, setToast] = useState('');
@@ -222,14 +221,12 @@ const STEPS = ['School', 'Visit', 'People', 'Outcome'];
 function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m: string) => void }) {
   const user = fs.auth!.user.name;
   const [step, setStep] = useState(0);
-  const [d, setD] = useState<Draft>(() => ({ date: iso(new Date()), time: new Date().toTimeString().slice(0, 5), by: user, status: 'done', classCounts: {} }));
+  const [d, setD] = useState<Draft>(() => ({ date: iso(new Date()), time: new Date().toTimeString().slice(0, 5), by: user, status: 'done' }));
   const [err, setErr] = useState<Record<string, string>>({});
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { scroller.current?.scrollTo(0, 0); }, [step]);
 
   const set = (k: keyof Visit) => (e: { target: { value: string } }) => { const val = e.target.value; setD(x => ({ ...x, [k]: val })); setErr(x => ({ ...x, [k]: '' })); };
-  const cc = d.classCounts || {};
-  const classTotal = CLASSES.reduce((n, c) => n + (parseInt(cc[c], 10) || 0), 0);
   const names = fs.team.map(m => m.name).includes(user) ? fs.team.map(m => m.name) : [user, ...fs.team.map(m => m.name)];
   const field = (k: keyof Visit) => 'f-input' + (err[k] ? ' bad' : '');
   const E = ({ k }: { k: string }) => err[k] ? <div className="err-text">{err[k]}</div> : null;
@@ -238,7 +235,7 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
     const e = validateVisit(d, step);
     if (Object.keys(e).length) return setErr(e);
     if (step < 3) return setStep(step + 1);
-    const v = { ...d, id: 'v-' + crypto.randomUUID(), students: classTotal ? String(classTotal) : '', followUp: d.status === 'followup' ? d.followUp : '' } as Visit;
+    const v = { ...d, id: 'v-' + crypto.randomUUID(), followUp: d.status === 'followup' ? d.followUp : '' } as Visit;
     fs.addVisit(v);
     flash(fs.online ? 'Visit saved' : 'Saved offline · will sync later');
     close();
@@ -265,21 +262,11 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
             <select className={field('zone')} value={d.zone || ''} onChange={set('zone')}><option value="">Select zone</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}</select>
             <E k="zone" />
           </div>
-          <div className="f-field" style={{ gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <label className="f-label">Students per class</label>
-              <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>Total <span className="mono" style={{ color: 'var(--ink)' }}>{fmtNum(classTotal)}</span></span>
-            </div>
-            <div className="class-inputs">
-              {CLASSES.map(c => (
-                <div key={c} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 500 }}>{classLabel(c)}</span>
-                  <input inputMode="numeric" placeholder="0" value={cc[c] || ''} aria-label={'Students in ' + classLabel(c)}
-                    onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 4); setD(x => ({ ...x, classCounts: { ...(x.classCounts || {}), [c]: val } })); }} />
-                </div>
-              ))}
-            </div>
-            <div className="f-hint">Leave blank for classes the school doesn't have.</div>
+          <div className="f-field">
+            <label className="f-label">Number of students</label>
+            <input inputMode="numeric" className={field('students')} style={{ fontFamily: 'var(--mono)' }} value={d.students || ''} placeholder="Total students in the school"
+              onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 6); setD(x => ({ ...x, students: val })); setErr(x => ({ ...x, students: '' })); }} />
+            <E k="students" />
           </div>
         </>}
 
@@ -323,7 +310,7 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
           )}
           <div className="review">
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.school}</div>
-            <div>{[d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, classTotal && fmtNum(classTotal) + ' students'].filter(Boolean).join(' · ')}</div>
+            <div>{[d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, d.students && fmtNum(d.students) + ' students'].filter(Boolean).join(' · ')}</div>
           </div>
         </>}
       </div>
@@ -339,7 +326,6 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
 function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void; flash: (m: string) => void }) {
   const v = fs.visits.find(x => x.id === id);
   if (!v) return <div className="detail-body"><button className="link-btn" onClick={back}>← Visits</button><div className="empty">This visit is no longer available.</div></div>;
-  const rows = classRows(v.classCounts);
   const rowsKv = [
     ['Zone', v.zone || '—'],
     ['Date', dLabel(v.date, true) + (v.time ? ', ' + v.time : '')],
@@ -357,14 +343,6 @@ function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void;
       </div>
       <div className="detail-body">
         <div className="card">{rowsKv.map(([k, val]) => <div className="kv" key={k}><span>{k}</span><span>{val}</span></div>)}</div>
-        {rows.length > 0 && (
-          <div className="card" style={{ padding: 14 }}>
-            <div className="caps">Students per class</div>
-            <div className="class-grid" style={{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 8, marginTop: 10 }}>
-              {rows.map(r => <div key={r.k}><div className="k">{r.k}</div><div className="v" style={{ fontSize: 15 }}>{r.v}</div></div>)}
-            </div>
-          </div>
-        )}
         <div className="card" style={{ padding: 14 }}>
           <div className="caps">School coordinator</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginTop: 6 }}>{v.coordName}</div>

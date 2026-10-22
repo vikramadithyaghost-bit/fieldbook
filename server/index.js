@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { openDb, seedIfEmpty } from './db.js';
+import { openDb, runResets, seedIfEmpty } from './db.js';
 import { createApp } from './app.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,6 +15,7 @@ const SEED = process.env.SEED_DEMO ? process.env.SEED_DEMO === '1' : !PROD;
 if (!/^\d{4}$/.test(ADMIN_PIN)) throw new Error('Set ADMIN_PIN to a 4-digit PIN');
 
 const db = openDb(process.env.DB_PATH || path.join(root, 'data', 'fieldbook.db'));
+for (const key of runResets(db)) console.log('Ran data reset ' + key);
 if (SEED && seedIfEmpty(db)) console.log('Seeded demo team and visits');
 
 const app = createApp(db, { adminPin: ADMIN_PIN });

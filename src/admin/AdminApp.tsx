@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Member, Period, Visit } from '../../shared/domain';
-import { ZONES, dLabel, daysFrom, fmtNum, inPeriod, initials, zonePlace, zoneShort } from '../../shared/domain.js';
+import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
 import { api, ApiError, save, store } from '../lib/api';
-import { classRows, groupSchools, schoolsCsv, visitsCsv, type School } from '../lib/schools';
+import { groupSchools, schoolsCsv, visitsCsv, type School } from '../lib/schools';
 import '../styles/admin.css';
 
 type View = 'overview' | 'schools' | 'members';
@@ -52,6 +52,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   const [memberFilter, setMemberFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'followup'>('all');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailEdit, setDetailEdit] = useState(false);
   const [schoolKey, setSchoolKey] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
@@ -75,6 +76,20 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   }, [refresh]);
 
   const schools = useMemo(() => groupSchools(visits), [visits]);
+  const act: VisitActions = {
+    team: team.map(m => m.name),
+    open: (id, edit = false) => { setDetailEdit(edit); setDetailId(id); },
+    update: async (id, patch) => {
+      const u = await call<Visit>('/visits/' + encodeURIComponent(id), { method: 'PATCH', body: patch });
+      setVisits(vs => vs.map(v => v.id === id ? u : v));
+    },
+    remove: async ids => {
+      for (const id of ids) {
+        try { await call('/visits/' + encodeURIComponent(id), { method: 'DELETE' }); } catch (e) { if (!(e instanceof ApiError && e.status === 404)) { refresh(); throw e; } }
+        setVisits(vs => vs.filter(v => v.id !== id));
+      }
+    }
+  };
   const q = query.trim().toLowerCase();
 
   const go = (v: View) => { setView(v); setDetailId(null); setSchoolKey(null); };
@@ -130,7 +145,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
 
         {view === 'overview' && (
           <Overview visits={visits} inP={inP} filtered={filtered} period={period} team={team}
-            zoneFilter={zoneFilter} setZoneFilter={setZoneFilter} memberFilter={memberFilter} setMemberFilter={setMemberFilter} openVisit={setDetailId} />
+            zoneFilter={zoneFilter} setZoneFilter={setZoneFilter} memberFilter={memberFilter} setMemberFilter={setMemberFilter} openVisit={id => act.open(id)} />
         )}
         {view === 'schools' && (
           <Schools all={schools} list={schoolList} zoneFilter={zoneFilter} statusFilter={statusFilter} q={q} page={page} setPage={setPage} selected={schoolKey}
@@ -140,8 +155,8 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
         {view === 'members' && <Members team={team} visits={visits} call={call} refresh={refresh} setTeam={setTeam} onRemoved={n => memberFilter === n && setMemberFilter('')} />}
       </div>
 
-      {schoolKey && <SchoolDrawer s={schools.find(r => r.key === schoolKey)} close={() => setSchoolKey(null)} />}
-      {detailId && <VisitDrawer v={visits.find(v => v.id === detailId)} close={() => setDetailId(null)} />}
+      {schoolKey && <SchoolDrawer s={schools.find(r => r.key === schoolKey)} close={() => setSchoolKey(null)} act={act} />}
+      {detailId && <VisitDrawer key={detailId + detailEdit} v={visits.find(v => v.id === detailId)} close={() => setDetailId(null)} act={act} startEditing={detailEdit} />}
     </div>
   );
 }
@@ -409,7 +424,7 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
   );
 }
 
-function Drawer({ zone, title, sub, close, width, children }: { zone: string; title: string; sub: string; close: () => void; width: number; children: ReactNode }) {
+function Drawer({ zone, title, sub, close, width, children, footer }: { zone: string; title: string; sub: string; close: () => void; width: number; children: ReactNode; footer?: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', onKey);
@@ -427,6 +442,7 @@ function Drawer({ zone, title, sub, close, width, children }: { zone: string; ti
         <button className="x-btn" onClick={close} aria-label="Close">×</button>
       </div>
       <div className="drawer-b">{children}</div>
+      {footer && <div className="drawer-f">{footer}</div>}
     </aside>
   </>;
 }
@@ -443,33 +459,43 @@ function Coordinator({ name, phone, email }: { name: string; phone: string; emai
   );
 }
 
-function Classes({ title, cc }: { title: string; cc: Record<string, string> | undefined }) {
-  const rows = classRows(cc);
-  if (!rows.length) return null;
+const statusText = (v: { status: string; followUp: string }) => v.status === 'followup' ? 'Follow-up · ' + dLabel(v.followUp, true) : 'Done';
+
+export interface VisitActions {
+  update: (id: string, patch: Partial<Visit>) => Promise<void>;
+  remove: (ids: string[]) => Promise<void>;
+  open: (id: string, edit?: boolean) => void;
+  team: string[];
+}
+
+/** Inline "Are you sure?" for deletes. */
+function ConfirmDelete({ label, prompt, onDelete }: { label: string; prompt: string; onDelete: () => Promise<void> }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!asking) return <button className="btn-sm red" onClick={() => setAsking(true)}>{label}</button>;
   return (
-    <div>
-      <div className="caps" style={{ marginBottom: 8 }}>{title}</div>
-      <div className="class-grid" style={{ gridTemplateColumns: 'repeat(5,minmax(0,1fr))' }}>{rows.map(r => <div key={r.k}><div className="k">{r.k}</div><div className="v">{r.v}</div></div>)}</div>
-    </div>
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{prompt}</span>
+      <button className="btn-sm solid-red" disabled={busy} onClick={async () => { setBusy(true); try { await onDelete(); } finally { setBusy(false); setAsking(false); } }}>{busy ? 'Deleting…' : 'Delete'}</button>
+      <button className="btn-sm" onClick={() => setAsking(false)}>Cancel</button>
+    </span>
   );
 }
 
-const statusText = (v: { status: string; followUp: string }) => v.status === 'followup' ? 'Follow-up · ' + dLabel(v.followUp, true) : 'Done';
-
-function SchoolDrawer({ s, close }: { s?: School; close: () => void }) {
+function SchoolDrawer({ s, close, act }: { s?: School; close: () => void; act: VisitActions }) {
   if (!s) return null;
-  const withClasses = s.visits.find(v => Object.values(v.classCounts || {}).some(x => +x));
+  const n = s.visitCount;
   return (
-    <Drawer zone={s.zone} title={s.school} sub={s.location} close={close} width={480}>
+    <Drawer zone={s.zone} title={s.school} sub={s.location} close={close} width={480}
+      footer={<ConfirmDelete label="Delete school" prompt={`Delete this school and its ${n} visit${n === 1 ? '' : 's'}?`} onDelete={async () => { await act.remove(s.visits.map(v => v.id)); close(); }} />}>
       <div>
-        {[['Students', s.students ? fmtNum(s.students) : '—'], ['Visits', s.visitCount], ['Visited by', s.members.join(', ')], ['Status', statusText(s.last)]].map(([k, v]) => (
+        {[['Students', s.students ? fmtNum(s.students) : '—'], ['Visits', n], ['Visited by', s.members.join(', ')], ['Status', statusText(s.last)]].map(([k, v]) => (
           <div className="kv" key={k}><span>{k}</span><span>{v}</span></div>
         ))}
       </div>
       <Coordinator name={s.coordName} phone={s.coordPhone} email={s.coordEmail} />
-      <Classes title="Students per class · latest visit" cc={withClasses?.classCounts} />
       <div>
-        <div className="caps" style={{ marginBottom: 8 }}>Visit history · {s.visitCount}</div>
+        <div className="caps" style={{ marginBottom: 8 }}>Visit history · {n}</div>
         {s.visits.map(h => (
           <div className="hist" key={h.id}>
             <div style={{ fontSize: 12, color: 'var(--ink-3)' }}><div style={{ fontWeight: 600, color: 'var(--ink)' }}>{dLabel(h.date)}</div>{h.time}</div>
@@ -480,6 +506,10 @@ function SchoolDrawer({ s, close }: { s?: School; close: () => void }) {
                   : <span className="badge done" style={{ fontSize: 11, padding: '1px 6px', borderRadius: 5 }}>Done</span>}
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--ink-2)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{h.notes || 'No notes.'}</div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                <button className="link-btn" style={{ fontSize: 13 }} onClick={() => act.open(h.id)}>View</button>
+                <button className="link-btn" style={{ fontSize: 13 }} onClick={() => act.open(h.id, true)}>Edit</button>
+              </div>
             </div>
           </div>
         ))}
@@ -488,19 +518,86 @@ function SchoolDrawer({ s, close }: { s?: School; close: () => void }) {
   );
 }
 
-function VisitDrawer({ v, close }: { v?: Visit; close: () => void }) {
+function VisitDrawer({ v, close, act, startEditing }: { v?: Visit; close: () => void; act: VisitActions; startEditing: boolean }) {
+  const [editing, setEditing] = useState(startEditing);
   if (!v) return null;
+  if (editing) return <VisitEditor v={v} act={act} done={() => setEditing(false)} close={close} />;
   return (
-    <Drawer zone={v.zone} title={v.school} sub={v.location} close={close} width={440}>
+    <Drawer zone={v.zone} title={v.school} sub={v.location} close={close} width={440}
+      footer={<>
+        <button className="btn-sm" onClick={() => setEditing(true)}>Edit visit</button>
+        <span style={{ marginLeft: 'auto' }}><ConfirmDelete label="Delete visit" prompt="Delete this visit?" onDelete={async () => { await act.remove([v.id]); close(); }} /></span>
+      </>}>
       <div>
         {[['Date', dLabel(v.date, true) + (v.time ? ', ' + v.time : '')], ['Visited by', v.by], ['Met with', v.metName + (v.metRole ? ' (' + v.metRole + ')' : '')],
           ['Students', v.students ? fmtNum(v.students) : '—'], ['Status', statusText(v)]].map(([k, val]) => <div className="kv" key={k}><span>{k}</span><span>{val}</span></div>)}
       </div>
       <Coordinator name={v.coordName} phone={v.coordPhone} email={v.coordEmail} />
-      <Classes title="Students per class" cc={v.classCounts} />
       <div>
         <div className="caps" style={{ marginBottom: 6 }}>Notes / outcome</div>
         <div style={{ fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{v.notes || 'No notes added.'}</div>
+      </div>
+    </Drawer>
+  );
+}
+
+function VisitEditor({ v, act, done, close }: { v: Visit; act: VisitActions; done: () => void; close: () => void }) {
+  const [d, setD] = useState<Visit>(v);
+  const [err, setErr] = useState<Record<string, string>>({});
+  const [saveErr, setSaveErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const names = act.team.includes(v.by) ? act.team : [v.by, ...act.team];
+  const set = (k: keyof Visit) => (e: { target: { value: string } }) => { const val = e.target.value; setD(x => ({ ...x, [k]: val })); setErr(x => ({ ...x, [k]: '' })); };
+  const cls = (k: string) => (err[k] ? 'bad' : '');
+  const E = ({ k }: { k: string }) => err[k] ? <span className="err-text" style={{ fontWeight: 400 }}>{err[k]}</span> : null;
+
+  const save = async () => {
+    const e = validateVisit(d);
+    if (Object.keys(e).length) return setErr(e);
+    setBusy(true); setSaveErr('');
+    try { await act.update(v.id, { ...d, followUp: d.status === 'followup' ? d.followUp : '' }); done(); } catch (x) { setSaveErr((x as Error).message); } finally { setBusy(false); }
+  };
+
+  return (
+    <Drawer zone="Edit visit" title={v.school} sub={v.location} close={close} width={480}
+      footer={<>
+        {saveErr && <span className="err-text" style={{ marginRight: 'auto' }}>{saveErr}</span>}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+          <button className="btn-sm" onClick={done}>Cancel</button>
+          <button className="a-btn" style={{ height: 30, padding: '0 14px', borderRadius: 7, fontSize: 13 }} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+        </span>
+      </>}>
+      <div className="ed">
+        <div className="caps">School</div>
+        <label>School name *<input className={cls('school')} value={d.school} onChange={set('school')} /><E k="school" /></label>
+        <label>Location *<input className={cls('location')} value={d.location} onChange={set('location')} /><E k="location" /></label>
+        <div className="two">
+          <label>Zone *<select className={cls('zone')} value={d.zone} onChange={set('zone')}><option value="">Select zone</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}</select><E k="zone" /></label>
+          <label>Number of students<input className={cls('students')} inputMode="numeric" value={d.students} onChange={e => { setD(x => ({ ...x, students: e.target.value.replace(/\D/g, '').slice(0, 6) })); setErr(x => ({ ...x, students: '' })); }} /><E k="students" /></label>
+        </div>
+        <div className="caps" style={{ marginTop: 6 }}>Visit</div>
+        <div className="two">
+          <label>Date *<input type="date" className={cls('date')} value={d.date} onChange={set('date')} /><E k="date" /></label>
+          <label>Time<input type="time" value={d.time} onChange={set('time')} /></label>
+        </div>
+        <label>Visited by *<select value={d.by} onChange={set('by')}>{names.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
+        <div className="caps" style={{ marginTop: 6 }}>People</div>
+        <div className="two">
+          <label>Met with *<input className={cls('metName')} value={d.metName} onChange={set('metName')} /><E k="metName" /></label>
+          <label>Role<input value={d.metRole} onChange={set('metRole')} /></label>
+        </div>
+        <label>Coordinator name *<input className={cls('coordName')} value={d.coordName} onChange={set('coordName')} /><E k="coordName" /></label>
+        <div className="two">
+          <label>Phone<input type="tel" className={cls('coordPhone')} value={d.coordPhone} onChange={set('coordPhone')} /><E k="coordPhone" /></label>
+          <label>Email<input type="email" className={cls('coordEmail')} value={d.coordEmail} onChange={set('coordEmail')} /><E k="coordEmail" /></label>
+        </div>
+        <div className="caps" style={{ marginTop: 6 }}>Outcome</div>
+        <label>Notes / outcome<textarea rows={4} value={d.notes} onChange={set('notes')} /></label>
+        <div className="two">
+          <label>Status *<select value={d.status} onChange={e => { const st = e.target.value as Visit['status']; setD(x => ({ ...x, status: st, followUp: st === 'followup' ? x.followUp || ago(-7) : x.followUp })); }}>
+            <option value="done">Done</option><option value="followup">Follow-up needed</option></select></label>
+          {d.status === 'followup' && <label>Follow-up date *<input type="date" className={cls('followUp')} value={d.followUp} onChange={set('followUp')} /><E k="followUp" /></label>}
+        </div>
       </div>
     </Drawer>
   );

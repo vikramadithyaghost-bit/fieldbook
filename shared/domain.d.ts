@@ -8,7 +8,6 @@ export interface Visit {
   school: string;
   location: string;
   zone: string;
-  classCounts: Record<string, string>;
   students: string;
   by: string;
   metName: string;
@@ -30,8 +29,6 @@ export interface Member {
 }
 
 export const ZONES: string[];
-export const CLASSES: string[];
-export function classLabel(c: string): string;
 export function zoneShort(z: string | undefined): string;
 export function zonePlace(z: string | undefined): string;
 export function iso(d: Date): string;

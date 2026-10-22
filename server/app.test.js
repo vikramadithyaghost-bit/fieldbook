@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb, seedIfEmpty } from './db.js';
+import { openDb, runResets, seedIfEmpty } from './db.js';
 import { createApp } from './app.js';
 import { ZONES, iso } from '../shared/domain.js';
 
@@ -18,7 +18,7 @@ const req = async (path, { method, body, token } = {}) => {
   const r = await fetch(base + path, { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body && JSON.stringify(body) });
   return { status: r.status, body: await r.json() };
 };
-const visit = (over = {}) => ({ id: 'v-test-' + Math.random(), school: 'Test School', location: 'Nagercoil', zone: ZONES[0], date: iso(new Date()), time: '10:00', by: 'Asha Verma', metName: 'HM', coordName: 'Coord', status: 'done', classCounts: { LKG: '20', '1': '30' }, ...over });
+const visit = (over = {}) => ({ id: 'v-test-' + Math.random(), school: 'Test School', location: 'Nagercoil', zone: ZONES[0], date: iso(new Date()), time: '10:00', by: 'Asha Verma', metName: 'HM', coordName: 'Coord', status: 'done', students: '1,250', ...over });
 
 test('team list exposes names only', async () => {
   const { body } = await req('/team');
@@ -33,13 +33,13 @@ test('member login checks the PIN', async () => {
   assert.equal(ok.body.user.name, 'Asha Verma');
 });
 
-test('visits need auth; create is idempotent and totals class counts', async () => {
+test('visits need auth; create is idempotent and stores the student count', async () => {
   assert.equal((await req('/visits')).status, 401);
   const { token } = (await req('/login', { body: { name: 'Rahul Nair', pin: '1357' } })).body;
   const v = visit();
   const a = await req('/visits', { body: v, token });
   assert.equal(a.status, 201);
-  assert.equal(a.body.students, '50');
+  assert.equal(a.body.students, '1250');
   const again = await req('/visits', { body: v, token });
   assert.equal(again.status, 200);
   const all = (await req('/visits', { token })).body;
@@ -83,6 +83,37 @@ test('admin manages members; reset and remove revoke sign-in', async () => {
   assert.equal((await req('/members/' + added.body.id, { method: 'DELETE', token })).status, 200);
   assert.equal((await req('/visits', { token: np.token })).status, 401);
   assert.equal((await req('/login', { body: { name: 'New Person', pin: added.body.pin } })).status, 401);
+});
+
+test('only the admin can delete a visit', async () => {
+  const member = (await req('/login', { body: { name: 'Meera Iyer', pin: '3146' } })).body;
+  const v = (await req('/visits', { body: visit(), token: member.token })).body;
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: member.token })).status, 403);
+  const { token } = (await req('/admin/login', { body: { pin: '0000' } })).body;
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token })).status, 200);
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token })).status, 404);
+});
+
+test('admin can edit any field of a visit', async () => {
+  const { token } = (await req('/admin/login', { body: { pin: '0000' } })).body;
+  const v = (await req('/visits', { body: visit(), token })).body;
+  const u = await req('/visits/' + v.id, { method: 'PATCH', body: { school: 'Renamed School', students: '300', zone: ZONES[5] }, token });
+  assert.equal(u.status, 200);
+  assert.equal(u.body.school, 'Renamed School');
+  assert.equal(u.body.students, '300');
+  assert.equal(u.body.metName, 'HM');
+});
+
+test('data resets run once and keep members', () => {
+  const db = openDb(':memory:');
+  seedIfEmpty(db);
+  assert.deepEqual(runResets(db), ['2026-10-22-clear-visits']);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM visits').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM members').get().n, 8);
+  seedIfEmpty(db); // members exist, so no reseed
+  db.prepare("INSERT INTO visits (id, date, school, location, zone, by_name, met_name, coord_name, status, created_at, updated_at) VALUES ('x', '2026-10-22', 's', 'l', 'z', 'b', 'm', 'c', 'done', '', '')").run();
+  assert.deepEqual(runResets(db), []);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM visits').get().n, 1);
 });
 
 test('repeated wrong PINs lock the account temporarily', async () => {

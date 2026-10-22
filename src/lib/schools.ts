@@ -1,5 +1,5 @@
 import type { Visit } from '../../shared/domain';
-import { CLASSES, classLabel, iso } from '../../shared/domain.js';
+import { iso } from '../../shared/domain.js';
 
 export interface School {
   key: string;
@@ -43,10 +43,6 @@ export function groupSchools(visits: Visit[]): School[] {
   });
 }
 
-export function classRows(cc: Record<string, string> | undefined) {
-  return CLASSES.filter(c => +(cc || {})[c]).map(c => ({ k: classLabel(c), v: cc![c] }));
-}
-
 function download(name: string, header: string[], rows: unknown[][]) {
   const q = (x: unknown) => '"' + String(x ?? '').replace(/"/g, '""') + '"';
   const body = [header.map(q).join(','), ...rows.map(r => r.map(q).join(','))].join('\n');
@@ -60,9 +56,8 @@ function download(name: string, header: string[], rows: unknown[][]) {
 
 export function visitsCsv(list: Visit[]) {
   download('school-visits',
-    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', ...CLASSES.map(classLabel), 'Status', 'Follow-up date', 'Notes'],
-    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students,
-      ...CLASSES.map(c => (v.classCounts || {})[c] || ''), v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes]));
+    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes'],
+    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes]));
 }
 
 export function schoolsCsv(list: School[]) {

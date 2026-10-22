@@ -5,7 +5,7 @@ School-visit logging for a field team in Kanyakumari district, plus a web dashbo
 | URL | Who | What |
 | --- | --- | --- |
 | `/` | Field team (phones) | Sign in with name + PIN, log visits in four steps, browse all team visits, per-member stats. Works offline. |
-| `/admin` | Admin (desktop) | Overview (KPIs, visits by zone, team, follow-ups due), Schools (paged, sortable table + detail drawer, CSV export), Members (add, PIN reset, remove). |
+| `/admin` | Admin (desktop) | Overview (KPIs, visits by zone, team, follow-ups due), Schools (paged, sortable table, detail drawer with edit/delete, CSV export), Members (add, PIN reset, remove). |
 
 The original Claude Design prototypes and the design chat are kept in `project/` and `chats/` for reference.
 
@@ -39,7 +39,8 @@ Locally: admin PIN `0000`; demo field login **Asha Verma · 2468**.
 - **Shared data:** every visit and member is stored in SQLite on the server, so everyone sees the whole team's visits.
 - **Offline:** the field app caches visits on the phone, and new visits or "Mark follow-up done" go into an on-device queue. The queue uploads when the connection returns (also every minute, and when you tap the sync pill). Uploads are idempotent, so retries never create duplicate visits. A service worker keeps the app shell available with no signal. Phones can install the app from the browser menu ("Add to Home screen").
 - **Sign-in:** members choose their name and enter the 4-digit PIN the admin generated. After 5 wrong PINs, that name is locked for 5 minutes. A PIN reset or removal signs that member out everywhere. Removed members keep their past visits.
-- **Students:** the total is always the sum of the per-class counts (LKG–Class 12).
+- **Admin edits:** in Schools, open a school to view, edit or delete any visit, or delete the school with all its visits. Deletes ask for confirmation and can't be undone.
+- **Data resets:** `RESETS` in `server/db.js` lists one-off clean-ups that run once on the next start (the first clears all test visits before go-live, keeping team members).
 
 ## Deploying
 

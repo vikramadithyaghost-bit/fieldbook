@@ -90,9 +90,15 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const v = cleanVisit({ ...rowToVisit(row), ...req.body, id: row.id });
     const errors = validateVisit(v);
     if (Object.keys(errors).length) return res.status(400).json({ error: Object.values(errors)[0], errors });
-    db.prepare(`UPDATE visits SET date=?, time=?, school=?, location=?, zone=?, class_counts=?, students=?, by_name=?, met_name=?, met_role=?, coord_name=?, coord_phone=?, coord_email=?, notes=?, status=?, follow_up=?, updated_at=? WHERE id=?`)
-      .run(v.date, v.time, v.school, v.location, v.zone, JSON.stringify(v.classCounts), v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp, new Date().toISOString(), v.id);
+    db.prepare(`UPDATE visits SET date=?, time=?, school=?, location=?, zone=?, students=?, by_name=?, met_name=?, met_role=?, coord_name=?, coord_phone=?, coord_email=?, notes=?, status=?, follow_up=?, updated_at=? WHERE id=?`)
+      .run(v.date, v.time, v.school, v.location, v.zone, v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp, new Date().toISOString(), v.id);
     res.json(rowToVisit(db.prepare('SELECT * FROM visits WHERE id = ?').get(v.id)));
+  });
+
+  app.delete('/api/visits/:id', auth('admin'), (req, res) => {
+    const r = db.prepare('DELETE FROM visits WHERE id = ?').run(req.params.id);
+    if (!r.changes) return res.status(404).json({ error: 'Visit not found' });
+    res.json({ ok: true });
   });
 
   // --- Team members (admin).

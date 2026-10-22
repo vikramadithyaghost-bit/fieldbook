@@ -63,10 +63,6 @@ button:disabled { cursor: default; }
 .kv > span:first-child { color: var(--ink-3); }
 .kv > span:last-child { font-weight: 500; text-align: right; }
 
-.class-grid { display: grid; gap: 6px; }
-.class-grid > div { background: var(--bg); border-radius: 8px; padding: 6px 8px; }
-.class-grid .k { font-size: 11px; color: var(--ink-3); }
-.class-grid .v { font-family: var(--mono); font-size: 14px; }
 
 .spin { width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: fbspin .8s linear infinite; display: inline-block; }
 @keyframes fbspin { to { transform: rotate(360deg); } }

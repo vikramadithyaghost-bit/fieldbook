@@ -1,9 +1,6 @@
 // Domain constants and date helpers shared by the server and both front-ends.
 
 export const ZONES = ['Zone 1 — Nagercoil', 'Zone 2 — Thovalai', 'Zone 3 — Thuckalay', 'Zone 4 — Marthandam', 'Zone 5 — Kulasekaram', 'Zone 6 — Kanyakumari'];
-export const CLASSES = ['LKG', 'UKG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
-
-export const classLabel = c => (/^\d/.test(c) ? 'Class ' + c : c);
 export const zoneShort = z => (z || '—').split(' — ')[0];
 export const zonePlace = z => (z || '').split(' — ')[1] || '';
 
@@ -48,6 +45,7 @@ export function validateVisit(d, step) {
     if (!d.school?.trim()) e.school = 'Enter the school name';
     if (!d.location?.trim()) e.location = 'Enter a location';
     if (!ZONES.includes(d.zone)) e.zone = 'Select a zone';
+    if (d.students && !/^\d{1,6}$/.test(String(d.students))) e.students = 'Enter a number';
   }
   if (all || step === 1) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) e.date = 'Pick the visit date';

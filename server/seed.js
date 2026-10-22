@@ -1,5 +1,5 @@
 // Demo data from the Fieldbook design: 8 team members and 14 Kanyakumari-district visits.
-import { ZONES, CLASSES, ago } from '../shared/domain.js';
+import { ZONES, ago } from '../shared/domain.js';
 
 export const SEED_TEAM = ['Asha Verma', 'Rahul Nair', 'Priya Singh', 'Kabir Shah', 'Meera Iyer', 'Arjun Rao', 'Neha Gupta', 'Vikram Das'];
 export const SEED_PINS = ['2468', '1357', '8024', '5791', '3146', '6620', '9083', '4419'];
@@ -22,14 +22,8 @@ export function seedVisits() {
     [16, '09:30', 'Sacred Heart School', 'Colachel, Thuckalay', 3, 820, T[1], 'Sr. Annie', 'Principal', 'Mr. Joseph K.', '+91 94470 55618', 'joseph@shscolachel.in', 'Teacher feedback session. Collected 24 forms.', 'done', ''],
     [21, '14:20', 'Panchayat Union Middle School', 'Suchindram, Thovalai', 2, 460, T[5], 'Mrs. Shaila', 'Head Teacher', 'Mr. Salim S.', '+91 98920 40871', '', 'Space constraints; proposed after-school slot.', 'done', '']
   ];
-  const split = (tot, i) => {
-    const n = tot > 900 ? 14 : 8, w = CLASSES.slice(0, n).map((_, j) => 1 + ((i * 7 + j * 3) % 5) / 10), sw = w.reduce((x, y) => x + y, 0), o = {};
-    let left = tot;
-    w.forEach((x, j) => { const c = j === n - 1 ? left : Math.round(tot * x / sw); o[CLASSES[j]] = String(c); left -= c; });
-    return o;
-  };
   return rows.map((r, i) => ({
-    id: 'seed-v' + (i + 1), date: a(r[0]), time: r[1], school: r[2], location: r[3], zone: ZONES[r[4] - 1], classCounts: split(r[5], i), students: String(r[5]),
+    id: 'seed-v' + (i + 1), date: a(r[0]), time: r[1], school: r[2], location: r[3], zone: ZONES[r[4] - 1], students: String(r[5]),
     by: r[6], metName: r[7], metRole: r[8], coordName: r[9], coordPhone: r[10], coordEmail: r[11], notes: r[12], status: r[13], followUp: r[14]
   }));
 }
