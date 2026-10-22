@@ -104,3 +104,15 @@ textarea.f-input { height: auto; padding: 12px; line-height: 1.4; resize: none; 
 .actions a.disabled { color: var(--ink-5); pointer-events: none; }
 
 .toast { position: absolute; left: 50%; bottom: calc(170px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 14px; font-weight: 500; padding: 10px 16px; border-radius: 10px; white-space: nowrap; animation: fbup .2s ease-out; z-index: 20; }
+
+/* Location and photos */
+.pick-btn { height: 48px; border: 1px dashed var(--field); border-radius: 10px; background: #fff; font-size: 15px; font-weight: 600; color: var(--acc); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.pick-btn:disabled { color: var(--ink-3); }
+.pin-ico { width: 12px; height: 12px; border: 2px solid currentColor; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); margin-top: -3px; }
+.geo-box { display: flex; align-items: center; gap: 14px; border: 1px solid var(--ok-line); background: var(--ok-tint); border-radius: 10px; padding: 10px 12px; }
+.photo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.photo { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--chip); display: block; }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-x { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: none; background: rgba(22, 24, 27, .7); color: #fff; font-size: 16px; line-height: 1; padding: 0; }
+.photo.add { border: 1px dashed var(--field); background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--acc); font-size: 12px; font-weight: 600; cursor: pointer; }
+.photo.add b { font-size: 22px; font-weight: 400; line-height: 1; }

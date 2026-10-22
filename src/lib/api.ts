@@ -30,9 +30,13 @@ export function store<T>(key: string, fallback: T): T {
   }
 }
 
-export function save(key: string, value: unknown) {
+/** Returns false when the browser refused to store it (usually because storage is full). */
+export function save(key: string, value: unknown): boolean {
   try {
     if (value === null || value === undefined) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }

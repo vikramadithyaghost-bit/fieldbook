@@ -1,5 +1,9 @@
 import type { Visit } from '../../shared/domain';
+import type { Geo } from '../../shared/domain';
 import { iso } from '../../shared/domain.js';
+import { mapsUrl } from './media';
+
+const geoCols = (g?: Geo | null) => (g ? [g.lat, g.lng, mapsUrl(g)] : ['', '', '']);
 
 export interface School {
   key: string;
@@ -56,13 +60,14 @@ function download(name: string, header: string[], rows: unknown[][]) {
 
 export function visitsCsv(list: Visit[]) {
   download('school-visits',
-    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes'],
-    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes]));
+    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes', 'Latitude', 'Longitude', 'Map link', 'Photos'],
+    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes,
+      v.geo?.lat ?? '', v.geo?.lng ?? '', v.geo ? mapsUrl(v.geo) : '', (v.photos || []).length]));
 }
 
 export function schoolsCsv(list: School[]) {
   download('schools',
-    ['School', 'Location', 'Zone', 'Students', 'Coordinator', 'Phone', 'Email', 'Visits', 'Last visit', 'Last visited by', 'Members', 'Status', 'Next follow-up'],
+    ['School', 'Location', 'Zone', 'Students', 'Coordinator', 'Phone', 'Email', 'Visits', 'Last visit', 'Last visited by', 'Members', 'Status', 'Next follow-up', 'Latitude', 'Longitude', 'Map link', 'Photos'],
     list.map(r => [r.school, r.location, r.zone, r.students, r.coordName, r.coordPhone, r.coordEmail, r.visitCount, r.last.date, r.last.by, r.membersLabel,
-      r.status === 'followup' ? 'Follow-up' : 'Done', r.followUp]));
+      r.status === 'followup' ? 'Follow-up' : 'Done', r.followUp, ...geoCols(r.visits.find(v => v.geo)?.geo), r.visits.reduce((n, v) => n + (v.photos || []).length, 0)]));
 }

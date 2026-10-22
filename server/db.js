@@ -40,6 +40,14 @@ export function openDb(file) {
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS visits_date ON visits(date);
+    CREATE TABLE IF NOT EXISTS photos (
+      id TEXT PRIMARY KEY,
+      visit_id TEXT NOT NULL REFERENCES visits(id) ON DELETE CASCADE,
+      mime TEXT NOT NULL,
+      data BLOB NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS photos_visit ON photos(visit_id);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -48,6 +56,9 @@ export function openDb(file) {
       created_at TEXT NOT NULL
     );
   `);
+  // Columns added after go-live: school GPS position.
+  const cols = new Set(db.prepare('PRAGMA table_info(visits)').all().map(c => c.name));
+  if (!cols.has('lat')) db.exec('ALTER TABLE visits ADD COLUMN lat REAL; ALTER TABLE visits ADD COLUMN lng REAL; ALTER TABLE visits ADD COLUMN geo_acc REAL;');
   return db;
 }
 
@@ -79,8 +90,17 @@ export function rowToVisit(r) {
   return {
     id: r.id, date: r.date, time: r.time, school: r.school, location: r.location, zone: r.zone, students: r.students,
     by: r.by_name, metName: r.met_name, metRole: r.met_role, coordName: r.coord_name, coordPhone: r.coord_phone, coordEmail: r.coord_email,
-    notes: r.notes, status: r.status, followUp: r.follow_up
+    notes: r.notes, status: r.status, followUp: r.follow_up,
+    geo: r.lat == null ? null : { lat: r.lat, lng: r.lng, acc: r.geo_acc ?? 0 }
   };
+}
+
+/** Accepts {lat, lng, acc} with sane ranges; anything else means "no location". */
+export function cleanGeo(g) {
+  if (!g || typeof g !== 'object') return null;
+  const lat = Number(g.lat), lng = Number(g.lng), acc = Number(g.acc) || 0;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat: +lat.toFixed(6), lng: +lng.toFixed(6), acc: Math.max(0, Math.round(acc)) };
 }
 
 const str = (x, max = 500) => String(x ?? '').trim().slice(0, max);
@@ -94,13 +114,14 @@ export function cleanVisit(v) {
     students: /^\d+$/.test(students) ? String(+students) : students,
     by: str(v.by, 100), metName: str(v.metName, 100), metRole: str(v.metRole, 100), coordName: str(v.coordName, 100),
     coordPhone: str(v.coordPhone, 30), coordEmail: str(v.coordEmail, 200), notes: str(v.notes, 5000),
-    status, followUp: status === 'followup' ? str(v.followUp, 10) : ''
+    status, followUp: status === 'followup' ? str(v.followUp, 10) : '',
+    geo: cleanGeo(v.geo)
   };
 }
 
 export function insertVisit(db, v, createdBy) {
   const now = new Date().toISOString();
-  db.prepare(`INSERT INTO visits (id, date, time, school, location, zone, class_counts, students, by_name, met_name, met_role, coord_name, coord_phone, coord_email, notes, status, follow_up, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(v.id, v.date, v.time, v.school, v.location, v.zone, '{}', v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp, createdBy, now, now);
+  db.prepare(`INSERT INTO visits (id, date, time, school, location, zone, class_counts, students, by_name, met_name, met_role, coord_name, coord_phone, coord_email, notes, status, follow_up, lat, lng, geo_acc, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(v.id, v.date, v.time, v.school, v.location, v.zone, '{}', v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp, v.geo?.lat ?? null, v.geo?.lng ?? null, v.geo?.acc ?? null, createdBy, now, now);
 }

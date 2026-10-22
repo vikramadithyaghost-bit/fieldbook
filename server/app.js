@@ -4,10 +4,24 @@ import { iso, validateVisit } from '../shared/domain.js';
 import { rowToVisit, cleanVisit, insertVisit } from './db.js';
 
 const MAX_FAILS = 5, LOCK_MS = 5 * 60 * 1000;
+const MAX_PHOTOS = 4, MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+
+/** Decodes the data-URL photos a phone sends. Throws a user-facing message on bad input. */
+function decodePhotos(list) {
+  if (list == null) return [];
+  if (!Array.isArray(list)) throw new Error('Photos must be a list');
+  return list.map(u => {
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(u));
+    if (!m) throw new Error('Photos must be JPEG, PNG or WebP images');
+    const data = Buffer.from(m[2], 'base64');
+    if (data.length > MAX_PHOTO_BYTES) throw new Error('A photo is too large');
+    return { mime: m[1], data };
+  });
+}
 
 export function createApp(db, { adminPin = '0000' } = {}) {
   const app = express();
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '20mb' })); // Room for a visit with its photos.
 
   // --- PIN brute-force protection: 5 wrong attempts per IP + account locks it for 5 minutes.
   const fails = new Map();
@@ -68,20 +82,44 @@ export function createApp(db, { adminPin = '0000' } = {}) {
 
   app.get('/api/me', auth(), (req, res) => res.json({ role: req.session.role, user: req.session.memberId ? { id: req.session.memberId, name: req.session.name } : null }));
 
+  // Photos are listed on each visit as URLs; the bytes are served separately.
+  const photosOf = id => db.prepare('SELECT id FROM photos WHERE visit_id = ? ORDER BY created_at, id').all(id).map(p => ({ id: p.id, url: '/api/photos/' + p.id }));
+  const getVisit = id => { const r = db.prepare('SELECT * FROM visits WHERE id = ?').get(id); return r && { ...rowToVisit(r), photos: photosOf(id) }; };
+  const addPhotos = (visitId, photos) => {
+    const ins = db.prepare('INSERT INTO photos (id, visit_id, mime, data, created_at) VALUES (?, ?, ?, ?, ?)');
+    photos.forEach(p => ins.run(randomUUID(), visitId, p.mime, p.data, new Date().toISOString()));
+  };
+
   // --- Visits: everyone signed in sees every visit.
   app.get('/api/visits', auth(), (req, res) => {
-    res.json(db.prepare('SELECT * FROM visits ORDER BY date DESC, time DESC').all().map(rowToVisit));
+    const byVisit = new Map();
+    for (const p of db.prepare('SELECT id, visit_id FROM photos ORDER BY created_at, id').all()) {
+      if (!byVisit.has(p.visit_id)) byVisit.set(p.visit_id, []);
+      byVisit.get(p.visit_id).push({ id: p.id, url: '/api/photos/' + p.id });
+    }
+    res.json(db.prepare('SELECT * FROM visits ORDER BY date DESC, time DESC').all().map(r => ({ ...rowToVisit(r), photos: byVisit.get(r.id) || [] })));
+  });
+
+  // Photo ids are random UUIDs, so an <img> can load them without a sign-in header.
+  app.get('/api/photos/:id', (req, res) => {
+    const p = db.prepare('SELECT mime, data FROM photos WHERE id = ?').get(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Photo not found' });
+    res.set('Cache-Control', 'private, max-age=31536000, immutable').type(p.mime).send(Buffer.from(p.data));
   });
 
   // Idempotent on the client-generated id, so a visit queued offline can be retried safely.
   app.post('/api/visits', auth(), (req, res) => {
     const v = cleanVisit({ ...req.body, id: req.body?.id || 'v-' + randomUUID() });
-    const existing = db.prepare('SELECT * FROM visits WHERE id = ?').get(v.id);
-    if (existing) return res.json(rowToVisit(existing));
+    const existing = getVisit(v.id);
+    if (existing) return res.json(existing);
     const errors = validateVisit(v);
     if (Object.keys(errors).length) return res.status(400).json({ error: Object.values(errors)[0], errors });
-    insertVisit(db, v, req.session.memberId);
-    res.status(201).json(rowToVisit(db.prepare('SELECT * FROM visits WHERE id = ?').get(v.id)));
+    let photos;
+    try { photos = decodePhotos(req.body.newPhotos); } catch (e) { return res.status(400).json({ error: e.message }); }
+    if (photos.length > MAX_PHOTOS) return res.status(400).json({ error: `Up to ${MAX_PHOTOS} photos per visit` });
+    db.exec('BEGIN');
+    try { insertVisit(db, v, req.session.memberId); addPhotos(v.id, photos); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+    res.status(201).json(getVisit(v.id));
   });
 
   app.patch('/api/visits/:id', auth(), (req, res) => {
@@ -90,9 +128,23 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const v = cleanVisit({ ...rowToVisit(row), ...req.body, id: row.id });
     const errors = validateVisit(v);
     if (Object.keys(errors).length) return res.status(400).json({ error: Object.values(errors)[0], errors });
-    db.prepare(`UPDATE visits SET date=?, time=?, school=?, location=?, zone=?, students=?, by_name=?, met_name=?, met_role=?, coord_name=?, coord_phone=?, coord_email=?, notes=?, status=?, follow_up=?, updated_at=? WHERE id=?`)
-      .run(v.date, v.time, v.school, v.location, v.zone, v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp, new Date().toISOString(), v.id);
-    res.json(rowToVisit(db.prepare('SELECT * FROM visits WHERE id = ?').get(v.id)));
+    const remove = Array.isArray(req.body.removePhotos) ? req.body.removePhotos.map(String) : [];
+    if (remove.length && req.session.role !== 'admin') return res.status(403).json({ error: 'Only the admin can remove photos' });
+    let photos;
+    try { photos = decodePhotos(req.body.newPhotos); } catch (e) { return res.status(400).json({ error: e.message }); }
+    const kept = photosOf(v.id).filter(p => !remove.includes(p.id)).length;
+    if (kept + photos.length > MAX_PHOTOS) return res.status(400).json({ error: `Up to ${MAX_PHOTOS} photos per visit` });
+    db.exec('BEGIN');
+    try {
+      db.prepare(`UPDATE visits SET date=?, time=?, school=?, location=?, zone=?, students=?, by_name=?, met_name=?, met_role=?, coord_name=?, coord_phone=?, coord_email=?, notes=?, status=?, follow_up=?, lat=?, lng=?, geo_acc=?, updated_at=? WHERE id=?`)
+        .run(v.date, v.time, v.school, v.location, v.zone, v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp,
+          v.geo?.lat ?? null, v.geo?.lng ?? null, v.geo?.acc ?? null, new Date().toISOString(), v.id);
+      const del = db.prepare('DELETE FROM photos WHERE id = ? AND visit_id = ?');
+      remove.forEach(id => del.run(id, v.id));
+      addPhotos(v.id, photos);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    res.json(getVisit(v.id));
   });
 
   app.delete('/api/visits/:id', auth('admin'), (req, res) => {

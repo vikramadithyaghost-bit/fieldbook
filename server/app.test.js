@@ -1,6 +1,10 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openDb, runResets, seedIfEmpty } from './db.js';
+import { openDb, rowToVisit, runResets, seedIfEmpty } from './db.js';
+import { DatabaseSync } from 'node:sqlite';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createApp } from './app.js';
 import { ZONES, iso } from '../shared/domain.js';
 
@@ -120,4 +124,57 @@ test('repeated wrong PINs lock the account temporarily', async () => {
   for (let i = 0; i < 5; i++) await req('/login', { body: { name: 'Vikram Das', pin: '0001' } });
   const r = await req('/login', { body: { name: 'Vikram Das', pin: '4419' } });
   assert.equal(r.status, 429);
+});
+
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+test('visits store a GPS location and photos', async () => {
+  const { token } = (await req('/login', { body: { name: 'Arjun Rao', pin: '6620' } })).body;
+  const created = await req('/visits', { body: visit({ geo: { lat: 8.1833301, lng: 77.4119, acc: 12.4 }, newPhotos: [PNG, PNG] }), token });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.geo, { lat: 8.18333, lng: 77.4119, acc: 12 });
+  assert.equal(created.body.photos.length, 2);
+  const img = await fetch(base.replace('/api', '') + created.body.photos[0].url);
+  assert.equal(img.headers.get('content-type'), 'image/png');
+  assert.equal((await img.arrayBuffer()).byteLength, Buffer.from(PNG.split(',')[1], 'base64').length);
+  const listed = (await req('/visits', { token })).body.find(v => v.id === created.body.id);
+  assert.equal(listed.photos.length, 2);
+
+  // Members can't remove photos; the admin can, and can clear the location.
+  assert.equal((await req('/visits/' + created.body.id, { method: 'PATCH', body: { removePhotos: [created.body.photos[0].id] }, token })).status, 403);
+  const admin = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
+  const u = await req('/visits/' + created.body.id, { method: 'PATCH', body: { removePhotos: [created.body.photos[0].id], geo: null }, token: admin });
+  assert.equal(u.body.photos.length, 1);
+  assert.equal(u.body.geo, null);
+  assert.equal((await fetch(base.replace('/api', '') + created.body.photos[0].url)).status, 404);
+
+  // Deleting the visit deletes its photos.
+  await req('/visits/' + created.body.id, { method: 'DELETE', token: admin });
+  assert.equal((await fetch(base.replace('/api', '') + u.body.photos[0].url)).status, 404);
+});
+
+test('bad photos and bad locations are rejected or ignored', async () => {
+  const { token } = (await req('/login', { body: { name: 'Arjun Rao', pin: '6620' } })).body;
+  assert.equal((await req('/visits', { body: visit({ newPhotos: ['data:text/html;base64,PGI+'] }), token })).status, 400);
+  assert.equal((await req('/visits', { body: visit({ newPhotos: [PNG, PNG, PNG, PNG, PNG] }), token })).status, 400);
+  const v = await req('/visits', { body: visit({ geo: { lat: 200, lng: 77 } }), token });
+  assert.equal(v.body.geo, null);
+});
+
+test('a live database from before photos/location upgrades in place', () => {
+  const file = path.join(os.tmpdir(), 'fieldbook-upgrade-' + process.pid + '.db');
+  fs.rmSync(file, { force: true });
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE visits (id TEXT PRIMARY KEY, date TEXT NOT NULL, time TEXT NOT NULL DEFAULT '', school TEXT NOT NULL, location TEXT NOT NULL, zone TEXT NOT NULL,
+    class_counts TEXT NOT NULL DEFAULT '{}', students TEXT NOT NULL DEFAULT '', by_name TEXT NOT NULL, met_name TEXT NOT NULL, met_role TEXT NOT NULL DEFAULT '',
+    coord_name TEXT NOT NULL, coord_phone TEXT NOT NULL DEFAULT '', coord_email TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL, follow_up TEXT NOT NULL DEFAULT '', created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    INSERT INTO visits (id, date, school, location, zone, by_name, met_name, coord_name, status, created_at, updated_at) VALUES ('old', '2026-10-22', 's', 'l', 'z', 'b', 'm', 'c', 'done', '', '');`);
+  old.close();
+  const db = openDb(file);
+  const row = db.prepare('SELECT * FROM visits WHERE id = ?').get('old');
+  assert.equal(rowToVisit(row).geo, null);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM photos').get().n, 0);
+  db.close();
+  fs.rmSync(file, { force: true });
 });

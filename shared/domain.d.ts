@@ -1,6 +1,9 @@
 export type Status = 'done' | 'followup';
 export type Period = 'today' | 'week' | 'month' | 'all';
 
+export interface Geo { lat: number; lng: number; acc: number }
+export interface Photo { id: string; url: string }
+
 export interface Visit {
   id: string;
   date: string;
@@ -18,6 +21,10 @@ export interface Visit {
   notes: string;
   status: Status;
   followUp: string;
+  geo?: Geo | null;
+  photos?: Photo[];
+  /** Data-URL photos waiting to upload with this visit. */
+  newPhotos?: string[];
   pending?: boolean;
 }
 

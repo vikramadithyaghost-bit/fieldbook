@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Member, Period, Visit } from '../../shared/domain';
+import type { Geo, Member, Period, Photo, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
 import { api, ApiError, save, store } from '../lib/api';
 import { groupSchools, schoolsCsv, visitsCsv, type School } from '../lib/schools';
+import { geoLabel, mapsUrl } from '../lib/media';
 import '../styles/admin.css';
 
 type View = 'overview' | 'schools' | 'members';
@@ -468,6 +469,30 @@ export interface VisitActions {
   team: string[];
 }
 
+function GeoBlock({ geo, title = 'School location' }: { geo?: Geo | null; title?: string }) {
+  if (!geo) return null;
+  return (
+    <div>
+      <div className="caps" style={{ marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontSize: 14 }}>{geoLabel(geo)}</span>
+        <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>±{geo.acc} m</span>
+        <a className="btn-sm" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--ink)' }} href={mapsUrl(geo)} target="_blank" rel="noreferrer">Open in Google Maps</a>
+      </div>
+    </div>
+  );
+}
+
+function Photos({ photos, title = 'Photos' }: { photos?: Photo[]; title?: string }) {
+  if (!photos?.length) return null;
+  return (
+    <div>
+      <div className="caps" style={{ marginBottom: 8 }}>{title} · {photos.length}</div>
+      <div className="a-photos">{photos.map(p => <a key={p.id} href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt="" loading="lazy" /></a>)}</div>
+    </div>
+  );
+}
+
 /** Inline "Are you sure?" for deletes. */
 function ConfirmDelete({ label, prompt, onDelete }: { label: string; prompt: string; onDelete: () => Promise<void> }) {
   const [asking, setAsking] = useState(false);
@@ -494,6 +519,8 @@ function SchoolDrawer({ s, close, act }: { s?: School; close: () => void; act: V
         ))}
       </div>
       <Coordinator name={s.coordName} phone={s.coordPhone} email={s.coordEmail} />
+      <GeoBlock geo={s.visits.find(v => v.geo)?.geo} />
+      <Photos photos={s.visits.flatMap(v => v.photos || [])} title="Photos from all visits" />
       <div>
         <div className="caps" style={{ marginBottom: 8 }}>Visit history · {n}</div>
         {s.visits.map(h => (
@@ -533,6 +560,8 @@ function VisitDrawer({ v, close, act, startEditing }: { v?: Visit; close: () => 
           ['Students', v.students ? fmtNum(v.students) : '—'], ['Status', statusText(v)]].map(([k, val]) => <div className="kv" key={k}><span>{k}</span><span>{val}</span></div>)}
       </div>
       <Coordinator name={v.coordName} phone={v.coordPhone} email={v.coordEmail} />
+      <GeoBlock geo={v.geo} />
+      <Photos photos={v.photos} />
       <div>
         <div className="caps" style={{ marginBottom: 6 }}>Notes / outcome</div>
         <div style={{ fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{v.notes || 'No notes added.'}</div>
@@ -546,6 +575,7 @@ function VisitEditor({ v, act, done, close }: { v: Visit; act: VisitActions; don
   const [err, setErr] = useState<Record<string, string>>({});
   const [saveErr, setSaveErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [removed, setRemoved] = useState<string[]>([]);
   const names = act.team.includes(v.by) ? act.team : [v.by, ...act.team];
   const set = (k: keyof Visit) => (e: { target: { value: string } }) => { const val = e.target.value; setD(x => ({ ...x, [k]: val })); setErr(x => ({ ...x, [k]: '' })); };
   const cls = (k: string) => (err[k] ? 'bad' : '');
@@ -555,7 +585,8 @@ function VisitEditor({ v, act, done, close }: { v: Visit; act: VisitActions; don
     const e = validateVisit(d);
     if (Object.keys(e).length) return setErr(e);
     setBusy(true); setSaveErr('');
-    try { await act.update(v.id, { ...d, followUp: d.status === 'followup' ? d.followUp : '' }); done(); } catch (x) { setSaveErr((x as Error).message); } finally { setBusy(false); }
+    const { photos: _p, ...fields } = d;
+    try { await act.update(v.id, { ...fields, followUp: d.status === 'followup' ? d.followUp : '', ...(removed.length ? { removePhotos: removed } : {}) } as Partial<Visit>); done(); } catch (x) { setSaveErr((x as Error).message); } finally { setBusy(false); }
   };
 
   return (
@@ -575,6 +606,30 @@ function VisitEditor({ v, act, done, close }: { v: Visit; act: VisitActions; don
           <label>Zone *<select className={cls('zone')} value={d.zone} onChange={set('zone')}><option value="">Select zone</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}</select><E k="zone" /></label>
           <label>Number of students<input className={cls('students')} inputMode="numeric" value={d.students} onChange={e => { setD(x => ({ ...x, students: e.target.value.replace(/\D/g, '').slice(0, 6) })); setErr(x => ({ ...x, students: '' })); }} /><E k="students" /></label>
         </div>
+        {d.geo && (
+          <label>School location
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontWeight: 400 }}>
+              <span className="mono" style={{ fontSize: 13 }}>{geoLabel(d.geo)}</span>
+              <button className="link-btn" style={{ fontSize: 13, color: 'var(--bad)' }} onClick={e => { e.preventDefault(); setD(x => ({ ...x, geo: null })); }}>Remove location</button>
+            </span>
+          </label>
+        )}
+        {!!v.photos?.length && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>Photos{removed.length ? ` · ${removed.length} will be removed` : ''}</span>
+            <div className="a-photos">
+              {v.photos.map(p => {
+                const gone = removed.includes(p.id);
+                return (
+                  <div key={p.id} className={'ed-photo' + (gone ? ' gone' : '')}>
+                    <img src={p.url} alt="" />
+                    <button onClick={() => setRemoved(r => gone ? r.filter(x => x !== p.id) : [...r, p.id])}>{gone ? 'Undo' : 'Remove'}</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="caps" style={{ marginTop: 6 }}>Visit</div>
         <div className="two">
           <label>Date *<input type="date" className={cls('date')} value={d.date} onChange={set('date')} /><E k="date" /></label>

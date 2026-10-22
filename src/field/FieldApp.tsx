@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { Period, Visit } from '../../shared/domain';
+import type { Geo, Period, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
 import { useFieldStore } from './useFieldStore';
+import { MAX_PHOTOS, compressPhoto, currentPosition, geoLabel, mapsUrl } from '../lib/media';
 import '../styles/field.css';
 
 type Screen = { name: 'home' } | { name: 'form' } | { name: 'detail'; id: string };
@@ -236,8 +237,8 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
     if (Object.keys(e).length) return setErr(e);
     if (step < 3) return setStep(step + 1);
     const v = { ...d, id: 'v-' + crypto.randomUUID(), followUp: d.status === 'followup' ? d.followUp : '' } as Visit;
-    fs.addVisit(v);
-    flash(fs.online ? 'Visit saved' : 'Saved offline · will sync later');
+    const stored = fs.addVisit(v);
+    flash(!stored ? 'Phone storage is full · connect to sync before closing the app' : fs.online ? 'Visit saved' : 'Saved offline · will sync later');
     close();
   };
 
@@ -264,10 +265,12 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
           </div>
           <div className="f-field">
             <label className="f-label">Number of students</label>
-            <input inputMode="numeric" className={field('students')} style={{ fontFamily: 'var(--mono)' }} value={d.students || ''} placeholder="Total students in the school"
+            <input inputMode="numeric" className={field('students')} value={d.students || ''} placeholder="Total students in the school"
               onChange={e => { const val = e.target.value.replace(/\D/g, '').slice(0, 6); setD(x => ({ ...x, students: val })); setErr(x => ({ ...x, students: '' })); }} />
             <E k="students" />
           </div>
+          <LocationField geo={d.geo || null} onChange={geo => setD(x => ({ ...x, geo }))} />
+          <PhotoField photos={d.newPhotos || []} onChange={newPhotos => setD(x => ({ ...x, newPhotos }))} flash={flash} />
         </>}
 
         {step === 1 && <>
@@ -310,7 +313,7 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
           )}
           <div className="review">
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.school}</div>
-            <div>{[d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, d.students && fmtNum(d.students) + ' students'].filter(Boolean).join(' · ')}</div>
+            <div>{[d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, d.students && fmtNum(d.students) + ' students', d.geo && 'location pinned', d.newPhotos?.length && d.newPhotos.length + ' photo' + (d.newPhotos.length > 1 ? 's' : '')].filter(Boolean).join(' · ')}</div>
           </div>
         </>}
       </div>
@@ -343,6 +346,22 @@ function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void;
       </div>
       <div className="detail-body">
         <div className="card">{rowsKv.map(([k, val]) => <div className="kv" key={k}><span>{k}</span><span>{val}</span></div>)}</div>
+        {v.geo && (
+          <div className="card" style={{ padding: 14 }}>
+            <div className="caps">School location</div>
+            <div className="mono" style={{ fontSize: 15, marginTop: 6 }}>{geoLabel(v.geo)}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 2 }}>Accurate to about {v.geo.acc} m</div>
+            <div className="actions"><a href={mapsUrl(v.geo)} target="_blank" rel="noreferrer">Open in Maps</a></div>
+          </div>
+        )}
+        {!!v.photos?.length && (
+          <div className="card" style={{ padding: 14 }}>
+            <div className="caps">Photos · {v.photos.length}</div>
+            <div className="photo-grid" style={{ marginTop: 10 }}>
+              {v.photos.map(p => <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="photo"><img src={p.url} alt={'Photo of ' + v.school} loading="lazy" /></a>)}
+            </div>
+          </div>
+        )}
         <div className="card" style={{ padding: 14 }}>
           <div className="caps">School coordinator</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginTop: 6 }}>{v.coordName}</div>
@@ -360,6 +379,68 @@ function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void;
           <button className="btn-primary" style={{ height: 50 }} onClick={() => { fs.updateVisit(v.id, { status: 'done', followUp: '' }); flash('Marked as done'); }}>Mark follow-up done</button>
         )}
       </div>
+    </div>
+  );
+}
+
+function LocationField({ geo, onChange }: { geo: Geo | null; onChange: (g: Geo | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const pin = async () => {
+    setBusy(true); setErr('');
+    try { onChange(await currentPosition()); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="f-field">
+      <label className="f-label">School location</label>
+      {geo ? (
+        <div className="geo-box">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 15 }}>{geoLabel(geo)}</div>
+            <div className="f-hint">Accurate to about {geo.acc} m · <a href={mapsUrl(geo)} target="_blank" rel="noreferrer">Check on map</a></div>
+          </div>
+          <button className="link-btn" style={{ fontSize: 14 }} onClick={pin} disabled={busy}>{busy ? '…' : 'Redo'}</button>
+          <button className="link-btn" style={{ fontSize: 14, color: 'var(--bad)' }} onClick={() => onChange(null)}>Remove</button>
+        </div>
+      ) : (
+        <button className="pick-btn" onClick={pin} disabled={busy}>{busy ? <><span className="spin" /> Getting location…</> : <><span className="pin-ico" /> Use my current location</>}</button>
+      )}
+      {err ? <div className="err-text">{err}</div> : !geo && <div className="f-hint">Tap this while you're at the school. Works without mobile data.</div>}
+    </div>
+  );
+}
+
+function PhotoField({ photos, onChange, flash }: { photos: string[]; onChange: (p: string[]) => void; flash: (m: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = MAX_PHOTOS - photos.length;
+    const picked = [...files].slice(0, room);
+    if (files.length > room) flash(`Up to ${MAX_PHOTOS} photos per visit`);
+    setBusy(true);
+    try { onChange([...photos, ...(await Promise.all(picked.map(f => compressPhoto(f))))]); } catch (e) { flash((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="f-field">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <label className="f-label">Photos of the school</label>
+        <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{photos.length} / {MAX_PHOTOS}</span>
+      </div>
+      <div className="photo-grid">
+        {photos.map((p, i) => (
+          <div key={i} className="photo">
+            <img src={p} alt={'Photo ' + (i + 1)} />
+            <button className="photo-x" aria-label="Remove photo" onClick={() => onChange(photos.filter((_, j) => j !== i))}>×</button>
+          </div>
+        ))}
+        {photos.length < MAX_PHOTOS && (
+          <label className="photo add">
+            {busy ? <span className="spin" style={{ color: 'var(--acc)' }} /> : <><b>+</b><span>Add photo</span></>}
+            <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => { add(e.target.files); e.target.value = ''; }} />
+          </label>
+        )}
+      </div>
+      <div className="f-hint">Take a new photo or choose from your gallery.</div>
     </div>
   );
 }

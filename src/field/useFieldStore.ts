@@ -20,7 +20,7 @@ export function useFieldStore(flash: (msg: string) => void) {
   outboxRef.current = outbox;
   authRef.current = auth;
 
-  const setOutbox = (next: Op[]) => { outboxRef.current = next; save(K.outbox, next); setOutboxState(next); };
+  const setOutbox = (next: Op[]) => { outboxRef.current = next; setOutboxState(next); return save(K.outbox, next); };
   const setAuth = (a: Auth | null) => { authRef.current = a; save(K.auth, a); setAuthState(a); };
 
   const loadTeam = useCallback(async () => {
@@ -88,12 +88,12 @@ export function useFieldStore(flash: (msg: string) => void) {
 
   useEffect(() => { if (auth) sync(); else loadTeam(); }, [auth, sync, loadTeam]);
 
-  const enqueue = (op: Op) => { setOutbox([...outboxRef.current, op]); setTimeout(sync, 0); };
+  const enqueue = (op: Op) => { const stored = setOutbox([...outboxRef.current, op]); setTimeout(sync, 0); return stored; };
 
   const visits = useMemo(() => {
     const byId = new Map(serverVisits.map(v => [v.id, v]));
     for (const op of outbox) {
-      if (op.kind === 'create' && !byId.has(op.visit.id)) byId.set(op.visit.id, { ...op.visit, pending: true });
+      if (op.kind === 'create' && !byId.has(op.visit.id)) byId.set(op.visit.id, { ...op.visit, pending: true, photos: (op.visit.newPhotos || []).map((url, i) => ({ id: 'local-' + i, url })) });
       if (op.kind === 'update' && byId.has(op.id)) byId.set(op.id, { ...byId.get(op.id)!, ...op.patch, pending: true });
     }
     return [...byId.values()].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
