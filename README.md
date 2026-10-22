@@ -1,25 +1,58 @@
-# CODING AGENTS: READ THIS FIRST
+# Fieldbook
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+School-visit logging for a field team in Kanyakumari district, plus a web dashboard for the admin. One server provides both:
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+| URL | Who | What |
+| --- | --- | --- |
+| `/` | Field team (phones) | Sign in with name + PIN, log visits in four steps, browse all team visits, per-member stats. Works offline. |
+| `/admin` | Admin (desktop) | Overview (KPIs, visits by zone, team, follow-ups due), Schools (paged, sortable table + detail drawer, CSV export), Members (add, PIN reset, remove). |
 
-## What you should do — IMPORTANT
+The original Claude Design prototypes and the design chat are kept in `project/` and `chats/` for reference.
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## Run it
 
-**Read `project/Fieldbook Web Dashboard.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+Requires **Node 22.13+**. The app uses the built-in `node:sqlite`, so there are no native modules to compile.
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```bash
+npm install
+npm run build      # type-checks and builds the front-end into dist/
+npm start          # http://localhost:3000  (field app)  ·  /admin (dashboard)
+```
 
-## About the design files
+For development, `npm run dev` runs the API on :3000 and Vite on :5173 with hot reload. Open http://localhost:5173 and http://localhost:5173/admin.
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+`npm test` runs the API tests.
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+### Configuration (environment variables)
 
-## Bundle contents
+| Variable | Default | |
+| --- | --- | --- |
+| `PORT` | `3000` | |
+| `ADMIN_PIN` | `0000` locally; **required** when `NODE_ENV=production` | 4-digit admin PIN for `/admin`. Set it on the host, never in the code. |
+| `DB_PATH` | `data/fieldbook.db` | SQLite file. Back this file up. |
+| `SEED_DEMO` | on locally, off when `NODE_ENV=production` | Loads 8 demo members and 14 demo visits into an empty database. A live server starts empty; add your real team under Members. |
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Field data collection app` project files (HTML prototypes, assets, components)
+Locally: admin PIN `0000`; demo field login **Asha Verma · 2468**.
+
+## How it works
+
+- **Shared data:** every visit and member is stored in SQLite on the server, so everyone sees the whole team's visits.
+- **Offline:** the field app caches visits on the phone, and new visits or "Mark follow-up done" go into an on-device queue. The queue uploads when the connection returns (also every minute, and when you tap the sync pill). Uploads are idempotent, so retries never create duplicate visits. A service worker keeps the app shell available with no signal. Phones can install the app from the browser menu ("Add to Home screen").
+- **Sign-in:** members choose their name and enter the 4-digit PIN the admin generated. After 5 wrong PINs, that name is locked for 5 minutes. A PIN reset or removal signs that member out everywhere. Removed members keep their past visits.
+- **Students:** the total is always the sum of the per-class counts (LKG–Class 12).
+
+## Deploying
+
+**Render (recommended):** push this repo to GitHub, then in Render choose **New → Blueprint** and pick the repo. Render asks for `ADMIN_PIN`; enter your admin PIN. `render.yaml` sets up the service, HTTPS and a 1 GB persistent disk for the database (Starter plan, needed for the disk). The site is live at `https://fieldbook-xxxx.onrender.com`; the field app is `/` and the dashboard is `/admin`.
+
+**Anywhere else:** the `Dockerfile` runs on Railway, Fly.io or any VM. Mount a persistent volume at `/data` (the database lives there) and serve it over HTTPS: phones need HTTPS for offline use and home-screen install.
+
+## Project layout
+
+```
+server/      Express API (app.js), SQLite schema (db.js), demo seed, tests
+shared/      Zones, classes, date helpers and validation shared by the server and the UI
+src/field/   Mobile field app and its offline store
+src/admin/   Admin web dashboard
+src/styles/  Design tokens and styles from the Fieldbook design
+```
