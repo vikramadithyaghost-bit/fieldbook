@@ -35,6 +35,9 @@
 .a-search input { flex: 1; min-width: 0; border: none; outline: none; font-size: 14px; background: transparent; }
 .btn-out { flex: none; white-space: nowrap; height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--field); background: #fff; font-size: 13px; font-weight: 600; }
 .btn-out:hover { background: var(--bg); }
+.btn-xl { border-color: var(--acc); background: var(--acc); color: #fff; }
+.btn-xl:hover { background: var(--acc-hover); }
+.btn-xl:disabled { opacity: .7; }
 .btn-sm { height: 30px; padding: 0 10px; border: 1px solid var(--field); border-radius: 7px; background: #fff; font-size: 13px; font-weight: 500; }
 .btn-sm:hover { background: var(--bg); }
 .btn-sm.red { color: var(--bad); }

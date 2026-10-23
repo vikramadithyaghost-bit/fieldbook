@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import type { Geo, Member, Period, Photo, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
 import { api, ApiError, save, store } from '../lib/api';
-import { groupSchools, schoolsCsv, visitsCsv, type School } from '../lib/schools';
+import { groupSchools, schoolsCsv, schoolsXlsx, visitsCsv, visitsXlsx, type School } from '../lib/schools';
 import { geoLabel, mapsUrl } from '../lib/media';
 import '../styles/admin.css';
 
@@ -105,7 +105,16 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   const schoolList = useMemo(() => schools.filter(r => (!zoneFilter || r.zone === zoneFilter) && (statusFilter === 'all' || r.status === statusFilter) &&
     (!q || [r.school, r.location, r.zone, r.coordName, r.coordPhone, r.coordEmail, r.members.join(' ')].join(' ').toLowerCase().includes(q))), [schools, zoneFilter, statusFilter, q]);
 
-  const exportCsv = () => view === 'schools' ? schoolsCsv(schoolList) : visitsCsv([...filtered].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)));
+  const [exporting, setExporting] = useState(false);
+  const newestFirst = <T extends { date: string; time: string }>(list: T[]) => [...list].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const exportList = () => view === 'schools' ? newestFirst(schoolList.map(r => ({ ...r, date: r.last.date, time: r.last.time }))) : newestFirst(filtered);
+  const exportCsv = () => view === 'schools' ? schoolsCsv(exportList() as School[]) : visitsCsv(exportList() as Visit[]);
+  const exportXlsx = async () => {
+    setExporting(true);
+    try { await (view === 'schools' ? schoolsXlsx(exportList() as School[]) : visitsXlsx(exportList() as Visit[])); }
+    catch { setLoadErr("Couldn't create the Excel file"); }
+    finally { setExporting(false); }
+  };
 
   return (
     <div className="shell">
@@ -138,7 +147,10 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
               <span className="search-ico" />
               <input type="search" placeholder={view === 'schools' ? 'Search school, coordinator, phone' : 'Search school, place, person'} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} />
             </div>
-            <div style={{ marginLeft: 'auto' }}><button className="btn-out" onClick={exportCsv}>Export CSV</button></div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <button className="btn-out" onClick={exportCsv} title="Plain CSV file">CSV</button>
+              <button className="btn-out btn-xl" onClick={exportXlsx} disabled={exporting} title="Excel workbook (.xlsx)">{exporting ? 'Preparing…' : 'Export Excel'}</button>
+            </div>
           </>}
         </header>
 
