@@ -4,7 +4,8 @@ import { api, ApiError, save, store } from '../lib/api';
 
 // Offline-first: visits are cached on the device and every write goes into an outbox
 // that is replayed against the server whenever a connection is available.
-type Op = { kind: 'create'; visit: Visit } | { kind: 'update'; id: string; patch: Partial<Visit> };
+type Patch = Partial<Visit> & { removePhotos?: string[] };
+type Op = { kind: 'create'; visit: Visit } | { kind: 'update'; id: string; patch: Patch } | { kind: 'delete'; id: string };
 interface Auth { token: string; user: { id: string; name: string } }
 
 const K = { auth: 'fieldbook-auth', visits: 'fieldbook-visits-cache', outbox: 'fieldbook-outbox', team: 'fieldbook-team-cache' };
@@ -52,12 +53,14 @@ export function useFieldStore(flash: (msg: string) => void) {
         const op = outboxRef.current[0];
         try {
           if (op.kind === 'create') await api('/visits', { body: op.visit, token: a.token });
-          else await api('/visits/' + encodeURIComponent(op.id), { method: 'PATCH', body: op.patch, token: a.token });
+          else if (op.kind === 'update') await api('/visits/' + encodeURIComponent(op.id), { method: 'PATCH', body: op.patch, token: a.token });
+          else await api('/visits/' + encodeURIComponent(op.id), { method: 'DELETE', token: a.token });
           sent++;
         } catch (e) {
           if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) throw e;
           if (e.status === 401) throw e;
-          flash('A change was rejected: ' + e.message); // Bad data would block the queue forever; drop it.
+          // Deleting something that's already gone is fine. Other bad changes would block the queue forever; drop them.
+          if (!(op.kind === 'delete' && e.status === 404)) flash('A change was rejected: ' + e.message);
         }
         setOutbox(outboxRef.current.slice(1));
       }
@@ -94,7 +97,12 @@ export function useFieldStore(flash: (msg: string) => void) {
     const byId = new Map(serverVisits.map(v => [v.id, v]));
     for (const op of outbox) {
       if (op.kind === 'create' && !byId.has(op.visit.id)) byId.set(op.visit.id, { ...op.visit, pending: true, photos: (op.visit.newPhotos || []).map((url, i) => ({ id: 'local-' + i, url })) });
-      if (op.kind === 'update' && byId.has(op.id)) byId.set(op.id, { ...byId.get(op.id)!, ...op.patch, pending: true });
+      if (op.kind === 'update' && byId.has(op.id)) {
+        const cur = byId.get(op.id)!, { removePhotos = [], newPhotos = [], ...fields } = op.patch;
+        const photos = [...(cur.photos || []).filter(p => !removePhotos.includes(p.id)), ...newPhotos.map((url, i) => ({ id: `local-${op.id}-${i}-${url.length}`, url }))];
+        byId.set(op.id, { ...cur, ...fields, photos, pending: true });
+      }
+      if (op.kind === 'delete') byId.delete(op.id);
     }
     return [...byId.values()].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   }, [serverVisits, outbox]);
@@ -107,15 +115,29 @@ export function useFieldStore(flash: (msg: string) => void) {
       setAuth(r);
       return r;
     },
-    addVisit: (v: Visit) => enqueue({ kind: 'create', visit: v }),
-    updateVisit: (id: string, patch: Partial<Visit>) => {
+    addVisit: (v: Visit) => enqueue({ kind: 'create', visit: { ...v, createdBy: authRef.current?.user.id } }),
+    isQueued: (id: string) => outboxRef.current.some(op => op.kind === 'create' && op.visit.id === id),
+    /** Visits this person entered (or queued on this phone) can be edited and deleted by them. */
+    isMine: (v: Visit) => !!auth && v.createdBy === auth.user.id,
+    deleteVisit: (id: string) => {
+      const queued = outboxRef.current.some(op => op.kind === 'create' && op.visit.id === id);
+      const rest = outboxRef.current.filter(op => !(op.kind === 'create' && op.visit.id === id) && !(op.kind === 'update' && op.id === id));
+      if (queued) { setOutbox(rest); return true; } // Never uploaded: just drop it.
+      const stored = setOutbox([...rest, { kind: 'delete', id }]);
+      setTimeout(sync, 0);
+      return stored;
+    },
+    updateVisit: (id: string, patch: Patch) => {
       const queued = outboxRef.current.findIndex(op => op.kind === 'create' && op.visit.id === id);
       if (queued >= 0) { // Not uploaded yet: just amend the queued create.
         const next = [...outboxRef.current], op = next[queued] as Extract<Op, { kind: 'create' }>;
-        next[queued] = { kind: 'create', visit: { ...op.visit, ...patch } };
-        setOutbox(next);
+        const { removePhotos: _r, ...fields } = patch;
+        next[queued] = { kind: 'create', visit: { ...op.visit, ...fields } };
+        const stored = setOutbox(next);
         setTimeout(sync, 0);
-      } else enqueue({ kind: 'update', id, patch });
+        return stored;
+      }
+      return enqueue({ kind: 'update', id, patch });
     }
   };
 }

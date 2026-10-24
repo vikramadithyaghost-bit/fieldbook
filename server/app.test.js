@@ -89,13 +89,33 @@ test('admin manages members; reset and remove revoke sign-in', async () => {
   assert.equal((await req('/login', { body: { name: 'New Person', pin: added.body.pin } })).status, 401);
 });
 
-test('only the admin can delete a visit', async () => {
-  const member = (await req('/login', { body: { name: 'Meera Iyer', pin: '3146' } })).body;
-  const v = (await req('/visits', { body: visit(), token: member.token })).body;
-  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: member.token })).status, 403);
-  const { token } = (await req('/admin/login', { body: { pin: '0000' } })).body;
-  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token })).status, 200);
-  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token })).status, 404);
+test('members can edit and delete only the visits they entered', async () => {
+  const meera = (await req('/login', { body: { name: 'Meera Iyer', pin: '3146' } })).body;
+  const neha = (await req('/login', { body: { name: 'Neha Gupta', pin: '9083' } })).body;
+  const v = (await req('/visits', { body: visit({ status: 'followup', followUp: iso(new Date()) }), token: meera.token })).body;
+  assert.equal(v.createdBy, meera.user.id);
+
+  // Someone else can't edit or delete it, but can still mark the follow-up done.
+  assert.equal((await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'hijack' }, token: neha.token })).status, 403);
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: neha.token })).status, 403);
+  const done = await req('/visits/' + v.id, { method: 'PATCH', body: { status: 'done', followUp: '' }, token: neha.token });
+  assert.equal(done.status, 200);
+  assert.equal(done.body.notes, '');
+
+  // The person who entered it can edit any field and delete it.
+  const e = await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'Corrected notes', students: '420' }, token: meera.token });
+  assert.equal(e.status, 200);
+  assert.equal(e.body.notes, 'Corrected notes');
+  assert.equal(e.body.students, '420');
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: meera.token })).status, 200);
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: meera.token })).status, 404);
+
+  // Seeded/legacy visits with no recorded author are admin-only.
+  const seeded = (await req('/visits', { token: neha.token })).body.find(x => x.id === 'seed-v1');
+  assert.equal((await req('/visits/' + seeded.id, { method: 'DELETE', token: neha.token })).status, 403);
+  const admin = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
+  const mine = (await req('/visits', { body: visit(), token: neha.token })).body;
+  assert.equal((await req('/visits/' + mine.id, { method: 'DELETE', token: admin })).status, 200);
 });
 
 test('admin can edit any field of a visit', async () => {
@@ -140,8 +160,9 @@ test('visits store a GPS location and photos', async () => {
   const listed = (await req('/visits', { token })).body.find(v => v.id === created.body.id);
   assert.equal(listed.photos.length, 2);
 
-  // Members can't remove photos; the admin can, and can clear the location.
-  assert.equal((await req('/visits/' + created.body.id, { method: 'PATCH', body: { removePhotos: [created.body.photos[0].id] }, token })).status, 403);
+  // Other members can't remove photos; the admin (or the author) can, and can clear the location.
+  const other = (await req('/login', { body: { name: 'Kabir Shah', pin: '5791' } })).body.token;
+  assert.equal((await req('/visits/' + created.body.id, { method: 'PATCH', body: { removePhotos: [created.body.photos[0].id] }, token: other })).status, 403);
   const admin = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
   const u = await req('/visits/' + created.body.id, { method: 'PATCH', body: { removePhotos: [created.body.photos[0].id], geo: null }, token: admin });
   assert.equal(u.body.photos.length, 1);

@@ -25,6 +25,8 @@ export interface Visit {
   photos?: Photo[];
   /** Data-URL photos waiting to upload with this visit. */
   newPhotos?: string[];
+  /** Member id of whoever entered the visit (null for older or admin-entered visits). */
+  createdBy?: string | null;
   pending?: boolean;
 }
 

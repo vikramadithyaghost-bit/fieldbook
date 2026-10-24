@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { Geo, Period, Visit } from '../../shared/domain';
+import type { Geo, Period, Photo, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
 import { useFieldStore } from './useFieldStore';
 import { MAX_PHOTOS, compressPhoto, currentPosition, geoLabel, mapsUrl } from '../lib/media';
 import '../styles/field.css';
 
-type Screen = { name: 'home' } | { name: 'form' } | { name: 'detail'; id: string };
+type Screen = { name: 'home' } | { name: 'form'; editId?: string } | { name: 'detail'; id: string };
 type Draft = Partial<Visit>;
 
 export default function FieldApp() {
@@ -36,8 +36,9 @@ export default function FieldApp() {
   return (
     <div className="app">
       {!fs.auth ? <Login fs={fs} /> :
-        screen.name === 'form' ? <VisitForm fs={fs} close={() => setScreen({ name: 'home' })} flash={flash} /> :
-        screen.name === 'detail' ? <Detail fs={fs} id={screen.id} back={() => setScreen({ name: 'home' })} flash={flash} /> :
+        screen.name === 'form' ? <VisitForm key={screen.editId || 'new'} fs={fs} flash={flash} edit={screen.editId ? fs.visits.find(v => v.id === screen.editId) : undefined}
+          close={() => screen.editId ? setScreenState({ name: 'detail', id: screen.editId }) : setScreen({ name: 'home' })} /> :
+        screen.name === 'detail' ? <Detail fs={fs} id={screen.id} back={() => setScreen({ name: 'home' })} flash={flash} edit={() => setScreenState({ name: 'form', editId: screen.id })} /> :
         <Home fs={fs} open={id => setScreen({ name: 'detail', id })} newVisit={() => setScreen({ name: 'form' })} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
@@ -219,10 +220,19 @@ function Home({ fs, open, newVisit }: { fs: FS; open: (id: string) => void; newV
 
 const STEPS = ['School', 'Visit', 'People', 'Outcome'];
 
-function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m: string) => void }) {
+// Fields a person can edit on a visit (everything except identity and photos, which are handled separately).
+const FIELDS = ['date', 'time', 'school', 'location', 'zone', 'students', 'by', 'metName', 'metRole', 'coordName', 'coordPhone', 'coordEmail', 'notes', 'status', 'followUp', 'geo'] as const;
+
+function VisitForm({ fs, close, flash, edit }: { fs: FS; close: () => void; flash: (m: string) => void; edit?: Visit }) {
+  const queued = !!edit && fs.isQueued(edit.id); // Not uploaded yet: its photos are still editable as a list.
+  const [existing] = useState(() => (edit && !queued ? edit.photos || [] : []).filter(p => !p.id.startsWith('local-')));
+  const [removed, setRemoved] = useState<string[]>([]);
   const user = fs.auth!.user.name;
   const [step, setStep] = useState(0);
-  const [d, setD] = useState<Draft>(() => ({ date: iso(new Date()), time: new Date().toTimeString().slice(0, 5), by: user, status: 'done' }));
+  const [d, setD] = useState<Draft>(() => edit
+    ? { ...Object.fromEntries(FIELDS.map(k => [k, edit[k]])), newPhotos: queued ? edit.newPhotos || [] : [] } as Draft
+    : { date: iso(new Date()), time: new Date().toTimeString().slice(0, 5), by: user, status: 'done' });
+  const [baseline] = useState(() => JSON.stringify(d));
   const [err, setErr] = useState<Record<string, string>>({});
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { scroller.current?.scrollTo(0, 0); }, [step]);
@@ -236,9 +246,17 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
     const e = validateVisit(d, step);
     if (Object.keys(e).length) return setErr(e);
     if (step < 3) return setStep(step + 1);
-    const v = { ...d, id: 'v-' + crypto.randomUUID(), followUp: d.status === 'followup' ? d.followUp : '' } as Visit;
-    const stored = fs.addVisit(v);
-    flash(!stored ? 'Phone storage is full · connect to sync before closing the app' : fs.online ? 'Visit saved' : 'Saved offline · will sync later');
+    let stored: boolean;
+    if (edit) {
+      const patch: Partial<Visit> & { removePhotos?: string[] } = Object.fromEntries(FIELDS.map(k => [k, d[k] ?? (k === 'geo' ? null : '')]));
+      patch.followUp = d.status === 'followup' ? d.followUp : '';
+      if (queued || d.newPhotos?.length) patch.newPhotos = d.newPhotos || [];
+      if (removed.length) patch.removePhotos = removed;
+      stored = fs.updateVisit(edit.id, patch);
+    } else {
+      stored = fs.addVisit({ ...d, id: 'v-' + crypto.randomUUID(), followUp: d.status === 'followup' ? d.followUp : '' } as Visit);
+    }
+    flash(!stored ? 'Phone storage is full · connect to sync before closing the app' : edit ? (fs.online ? 'Changes saved' : 'Changes saved offline · will sync later') : fs.online ? 'Visit saved' : 'Saved offline · will sync later');
     close();
   };
 
@@ -246,8 +264,11 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
     <div className="form">
       <div className="form-head">
         <div className="nav">
-          <button className="link-btn" style={{ fontSize: 16, fontWeight: 400 }} onClick={() => { if (!d.school || confirm('Discard this visit?')) close(); }}>Cancel</button>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>New visit</div>
+          <button className="link-btn" style={{ fontSize: 16, fontWeight: 400 }} onClick={() => {
+            const dirty = edit ? JSON.stringify(d) !== baseline || removed.length > 0 : !!d.school;
+            if (!dirty || confirm(edit ? 'Discard your changes?' : 'Discard this visit?')) close();
+          }}>Cancel</button>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{edit ? 'Edit visit' : 'New visit'}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', width: 52, textAlign: 'right' }}>{step + 1} of 4</div>
         </div>
         <div className="steps">{STEPS.map((_, i) => <div key={i} className={i <= step ? 'on' : ''} />)}</div>
@@ -270,7 +291,8 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
             <E k="students" />
           </div>
           <LocationField geo={d.geo || null} onChange={geo => setD(x => ({ ...x, geo }))} />
-          <PhotoField photos={d.newPhotos || []} onChange={newPhotos => setD(x => ({ ...x, newPhotos }))} flash={flash} />
+          <PhotoField photos={d.newPhotos || []} onChange={newPhotos => setD(x => ({ ...x, newPhotos }))} flash={flash}
+            existing={existing.filter(p => !removed.includes(p.id))} removeExisting={id => setRemoved(r => [...r, id])} />
         </>}
 
         {step === 1 && <>
@@ -320,13 +342,13 @@ function VisitForm({ fs, close, flash }: { fs: FS; close: () => void; flash: (m:
 
       <div className="form-foot">
         {step > 0 && <button className="btn-ghost" onClick={() => { setStep(step - 1); setErr({}); }}>Back</button>}
-        <button className="btn-primary" style={{ flex: 1 }} onClick={next}>{step === 3 ? (fs.online ? 'Save visit' : 'Save offline') : 'Next'}</button>
+        <button className="btn-primary" style={{ flex: 1 }} onClick={next}>{step === 3 ? (edit ? (fs.online ? 'Save changes' : 'Save offline') : fs.online ? 'Save visit' : 'Save offline') : 'Next'}</button>
       </div>
     </div>
   );
 }
 
-function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void; flash: (m: string) => void }) {
+function Detail({ fs, id, back, flash, edit }: { fs: FS; id: string; back: () => void; flash: (m: string) => void; edit: () => void }) {
   const v = fs.visits.find(x => x.id === id);
   if (!v) return <div className="detail-body"><button className="link-btn" onClick={back}>← Visits</button><div className="empty">This visit is no longer available.</div></div>;
   const rowsKv = [
@@ -378,6 +400,18 @@ function Detail({ fs, id, back, flash }: { fs: FS; id: string; back: () => void;
         {v.status === 'followup' && (
           <button className="btn-primary" style={{ height: 50 }} onClick={() => { fs.updateVisit(v.id, { status: 'done', followUp: '' }); flash('Marked as done'); }}>Mark follow-up done</button>
         )}
+        {fs.isMine(v) && (
+          <div className="own-actions">
+            <button className="btn-ghost" onClick={edit}>Edit visit</button>
+            <button className="btn-ghost danger" onClick={() => {
+              if (!confirm(`Delete this visit to ${v.school}? This can't be undone.`)) return;
+              const stored = fs.deleteVisit(v.id);
+              flash(!stored ? 'Phone storage is full · connect to sync' : fs.online ? 'Visit deleted' : 'Deleted · will sync later');
+              back();
+            }}>Delete</button>
+          </div>
+        )}
+        {!fs.isMine(v) && <div className="f-hint" style={{ textAlign: 'center' }}>Only {v.createdBy ? 'the person who entered this visit' : 'the admin'} can edit or delete it.</div>}
       </div>
     </div>
   );
@@ -410,11 +444,14 @@ function LocationField({ geo, onChange }: { geo: Geo | null; onChange: (g: Geo |
   );
 }
 
-function PhotoField({ photos, onChange, flash }: { photos: string[]; onChange: (p: string[]) => void; flash: (m: string) => void }) {
+function PhotoField({ photos, onChange, flash, existing = [], removeExisting }: {
+  photos: string[]; onChange: (p: string[]) => void; flash: (m: string) => void; existing?: Photo[]; removeExisting?: (id: string) => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const count = existing.length + photos.length;
   const add = async (files: FileList | null) => {
     if (!files?.length) return;
-    const room = MAX_PHOTOS - photos.length;
+    const room = MAX_PHOTOS - count;
     const picked = [...files].slice(0, room);
     if (files.length > room) flash(`Up to ${MAX_PHOTOS} photos per visit`);
     setBusy(true);
@@ -424,16 +461,22 @@ function PhotoField({ photos, onChange, flash }: { photos: string[]; onChange: (
     <div className="f-field">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <label className="f-label">Photos of the school</label>
-        <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{photos.length} / {MAX_PHOTOS}</span>
+        <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{count} / {MAX_PHOTOS}</span>
       </div>
       <div className="photo-grid">
+        {existing.map(p => (
+          <div key={p.id} className="photo">
+            <img src={p.url} alt="Saved photo" />
+            <button className="photo-x" aria-label="Remove photo" onClick={() => removeExisting?.(p.id)}>×</button>
+          </div>
+        ))}
         {photos.map((p, i) => (
           <div key={i} className="photo">
             <img src={p} alt={'Photo ' + (i + 1)} />
             <button className="photo-x" aria-label="Remove photo" onClick={() => onChange(photos.filter((_, j) => j !== i))}>×</button>
           </div>
         ))}
-        {photos.length < MAX_PHOTOS && (
+        {count < MAX_PHOTOS && (
           <label className="photo add">
             {busy ? <span className="spin" style={{ color: 'var(--acc)' }} /> : <><b>+</b><span>Add photo</span></>}
             <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={e => { add(e.target.files); e.target.value = ''; }} />

@@ -116,3 +116,7 @@ textarea.f-input { height: auto; padding: 12px; line-height: 1.4; resize: none; 
 .photo-x { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: none; background: rgba(22, 24, 27, .7); color: #fff; font-size: 16px; line-height: 1; padding: 0; }
 .photo.add { border: 1px dashed var(--field); background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--acc); font-size: 12px; font-weight: 600; cursor: pointer; }
 .photo.add b { font-size: 22px; font-weight: 400; line-height: 1; }
+
+.own-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.own-actions .btn-ghost { height: 48px; font-size: 15px; }
+.btn-ghost.danger { color: var(--bad); }

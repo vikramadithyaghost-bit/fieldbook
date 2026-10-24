@@ -122,14 +122,19 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     res.status(201).json(getVisit(v.id));
   });
 
+  // The admin can change any visit; a member can change the visits they entered.
+  // Anyone signed in may still mark a follow-up as done.
+  const canChange = (s, row) => s.role === 'admin' || (!!row.created_by && row.created_by === s.memberId);
+  const isMarkDone = body => Object.keys(body || {}).every(k => k === 'status' || k === 'followUp') && body.status === 'done';
+
   app.patch('/api/visits/:id', auth(), (req, res) => {
     const row = db.prepare('SELECT * FROM visits WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Visit not found' });
+    if (!canChange(req.session, row) && !isMarkDone(req.body)) return res.status(403).json({ error: 'You can only edit visits you entered' });
     const v = cleanVisit({ ...rowToVisit(row), ...req.body, id: row.id });
     const errors = validateVisit(v);
     if (Object.keys(errors).length) return res.status(400).json({ error: Object.values(errors)[0], errors });
     const remove = Array.isArray(req.body.removePhotos) ? req.body.removePhotos.map(String) : [];
-    if (remove.length && req.session.role !== 'admin') return res.status(403).json({ error: 'Only the admin can remove photos' });
     let photos;
     try { photos = decodePhotos(req.body.newPhotos); } catch (e) { return res.status(400).json({ error: e.message }); }
     const kept = photosOf(v.id).filter(p => !remove.includes(p.id)).length;
@@ -147,9 +152,11 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     res.json(getVisit(v.id));
   });
 
-  app.delete('/api/visits/:id', auth('admin'), (req, res) => {
-    const r = db.prepare('DELETE FROM visits WHERE id = ?').run(req.params.id);
-    if (!r.changes) return res.status(404).json({ error: 'Visit not found' });
+  app.delete('/api/visits/:id', auth(), (req, res) => {
+    const row = db.prepare('SELECT created_by FROM visits WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Visit not found' });
+    if (!canChange(req.session, row)) return res.status(403).json({ error: 'You can only delete visits you entered' });
+    db.prepare('DELETE FROM visits WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
   });
 
