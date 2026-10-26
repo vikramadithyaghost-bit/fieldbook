@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Geo, Member, Period, Photo, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, statusLabel, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
 import { api, ApiError, save, store } from '../lib/api';
 import { groupSchools, schoolsCsv, schoolsXlsx, visitsCsv, visitsXlsx, type School } from '../lib/schools';
 import { geoLabel, mapsUrl } from '../lib/media';
 import { Activity } from './Activity';
+import { exact, stamp, wasUpdated } from '../lib/time';
 import '../styles/admin.css';
 
 type View = 'overview' | 'schools' | 'members' | 'activity';
@@ -456,12 +457,19 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
   );
 }
 
+// Open drawers, oldest first, so Escape closes only the one on top (a visit opened over a school).
+const openDrawers: symbol[] = [];
+
 function Drawer({ zone, title, sub, close, width, children, footer }: { zone: string; title: string; sub: string; close: () => void; width: number; children: ReactNode; footer?: ReactNode }) {
+  const me = useRef(Symbol('drawer')), closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const id = me.current;
+    openDrawers.push(id);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && openDrawers[openDrawers.length - 1] === id) closeRef.current(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [close]);
+    return () => { window.removeEventListener('keydown', onKey); openDrawers.splice(openDrawers.indexOf(id), 1); };
+  }, []);
   return <>
     <div className="scrim" onClick={close} />
     <aside className="drawer" style={{ width: `min(${width}px, 100%)` }} role="dialog" aria-label={title}>
@@ -564,6 +572,11 @@ function SchoolDrawer({ s, close, act }: { s?: School; close: () => void; act: V
                   {h.status === 'followup' ? 'Follow-up ' + dLabel(h.followUp) : statusLabel(h.status)}</span>
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--ink-2)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{h.notes || 'No notes.'}</div>
+              {h.createdAt && (
+                <div className="stamp" title={'Entered ' + exact(h.createdAt) + (wasUpdated(h) ? '\nLast updated ' + exact(h.updatedAt) : '')}>
+                  Entered {stamp(h.createdAt)}{h.enteredBy ? ' by ' + h.enteredBy : ''}{wasUpdated(h) ? ' · updated ' + stamp(h.updatedAt) : ''}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
                 <button className="link-btn" style={{ fontSize: 13 }} onClick={() => act.open(h.id)}>View</button>
                 <button className="link-btn" style={{ fontSize: 13 }} onClick={() => act.open(h.id, true)}>Edit</button>
@@ -588,7 +601,9 @@ function VisitDrawer({ v, close, act, startEditing }: { v?: Visit; close: () => 
       </>}>
       <div>
         {[['Date', dLabel(v.date, true) + (v.time ? ', ' + v.time : '')], ['Visited by', v.by], ['Met with', v.metName + (v.metRole ? ' (' + v.metRole + ')' : '')],
-          ['Students', v.students ? fmtNum(v.students) : '—'], ['Status', statusText(v)]].map(([k, val]) => <div className="kv" key={k}><span>{k}</span><span>{val}</span></div>)}
+          ['Students', v.students ? fmtNum(v.students) : '—'], ['Status', statusText(v)],
+          ['Entered', v.createdAt ? <span title={exact(v.createdAt)}>{stamp(v.createdAt)}{v.enteredBy ? ' · ' + v.enteredBy : ''}</span> : '—'],
+          ...(wasUpdated(v) ? [['Last updated', <span title={exact(v.updatedAt)}>{stamp(v.updatedAt)}</span>]] : [])].map(([k, val]) => <div className="kv" key={String(k)}><span>{k}</span><span>{val}</span></div>)}
       </div>
       <Coordinator name={v.coordName} phone={v.coordPhone} email={v.coordEmail} />
       <GeoBlock geo={v.geo} />

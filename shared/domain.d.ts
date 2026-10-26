@@ -27,6 +27,10 @@ export interface Visit {
   newPhotos?: string[];
   /** Member id of whoever entered the visit (null for older or admin-entered visits). */
   createdBy?: string | null;
+  /** Server timestamps (ISO): when the visit was entered and last changed, and who entered it. */
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  enteredBy?: string | null;
   pending?: boolean;
 }
 

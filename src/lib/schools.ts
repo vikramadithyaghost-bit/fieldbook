@@ -2,6 +2,7 @@ import type { Visit } from '../../shared/domain';
 import type { Geo } from '../../shared/domain';
 import { iso, statusLabel } from '../../shared/domain.js';
 import { mapsUrl } from './media';
+import { csvStamp, wasUpdated } from './time';
 
 const geoCols = (g?: Geo | null) => (g ? [g.lat, g.lng, mapsUrl(g)] : ['', '', '']);
 
@@ -60,9 +61,10 @@ function download(name: string, header: string[], rows: unknown[][]) {
 
 export function visitsCsv(list: Visit[]) {
   download('school-visits',
-    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes', 'Latitude', 'Longitude', 'Map link', 'Photos'],
+    ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes', 'Latitude', 'Longitude', 'Map link', 'Photos', 'Entered at', 'Entered by', 'Last updated'],
     list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, statusLabel(v.status), v.followUp, v.notes,
-      v.geo?.lat ?? '', v.geo?.lng ?? '', v.geo ? mapsUrl(v.geo) : '', (v.photos || []).length]));
+      v.geo?.lat ?? '', v.geo?.lng ?? '', v.geo ? mapsUrl(v.geo) : '', (v.photos || []).length,
+      csvStamp(v.createdAt), v.enteredBy || '', wasUpdated(v) ? csvStamp(v.updatedAt) : '']));
 }
 
 export function schoolsCsv(list: School[]) {
@@ -82,12 +84,13 @@ const num = (s: string) => (s && /^\d+$/.test(s) ? +s : s);
 const VISIT_COLS = [
   ['Date', 12], ['Time', 8], ['School', 34], ['Location', 22], ['Zone', 22], ['Visited by', 16], ['Met with', 20], ['Role', 16], ['Coordinator', 20],
   ['Phone', 16], ['Email', 26], ['Students', 10], ['Status', 11], ['Follow-up date', 14], ['Notes', 50], ['Latitude', 11], ['Longitude', 11], ['Map', 11],
-  ['Photo 1', 9], ['Photo 2', 9], ['Photo 3', 9], ['Photo 4', 9]
+  ['Photo 1', 9], ['Photo 2', 9], ['Photo 3', 9], ['Photo 4', 9], ['Entered at', 17], ['Entered by', 16], ['Last updated', 17]
 ] as const;
 
 const visitRow = (v: Visit): XCell[] => [
   { date: v.date }, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, num(v.students),
-  yesNo(v.status), v.followUp ? { date: v.followUp } : '', v.notes, v.geo?.lat, v.geo?.lng, mapCell(v.geo), ...photoCells(v)
+  yesNo(v.status), v.followUp ? { date: v.followUp } : '', v.notes, v.geo?.lat, v.geo?.lng, mapCell(v.geo), ...photoCells(v),
+  v.createdAt ? { datetime: v.createdAt } : '', v.enteredBy || '', wasUpdated(v) ? { datetime: v.updatedAt! } : ''
 ];
 
 async function downloadXlsx(name: string, sheets: import('./xlsx').Sheet[]) {

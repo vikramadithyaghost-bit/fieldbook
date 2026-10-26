@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import type { Geo, Period, Photo, Visit } from '../../shared/domain';
 import { ZONES, ago, dLabel, statusLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
 import { useFieldStore } from './useFieldStore';
+import { stamp, wasUpdated } from '../lib/time';
 import { MAX_PHOTOS, compressPhoto, currentPosition, geoLabel, mapsUrl } from '../lib/media';
 import '../styles/field.css';
 
@@ -362,7 +363,9 @@ function Detail({ fs, id, back, flash, edit }: { fs: FS; id: string; back: () =>
     ['Date', dLabel(v.date, true) + (v.time ? ', ' + v.time : '')],
     ['Visited by', v.by],
     ['Met with', v.metName + (v.metRole ? ' (' + v.metRole + ')' : '')],
-    ['Students', v.students ? fmtNum(v.students) : '—']
+    ['Students', v.students ? fmtNum(v.students) : '—'],
+    ['Entered', v.createdAt ? stamp(v.createdAt) + (v.enteredBy ? ' · ' + v.enteredBy : '') : 'Not synced yet'],
+    ...(wasUpdated(v) ? [['Last updated', stamp(v.updatedAt)]] : [])
   ];
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>

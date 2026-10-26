@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Member, Visit } from '../../shared/domain';
 import { dLabel, initials, iso, statusLabel, zoneShort } from '../../shared/domain.js';
+import { exact } from '../lib/time';
 
 interface Change { field: string; from: string; to: string }
 interface Item {
@@ -56,7 +57,7 @@ function describe(i: Item): { text: ReactNode; sub?: string } {
 }
 
 const dayLabel = (at: string) => { const d = iso(new Date(at)); return dLabel(d, true); };
-const timeLabel = (at: string) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const timeLabel = (at: string) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 export function Activity({ call, team, visits, refreshedAt, openVisit, openSchool }: {
   call: Call; team: Member[]; visits: Visit[]; refreshedAt: Date | null; openVisit: (id: string) => void; openSchool: (key: string) => void;
@@ -156,7 +157,7 @@ export function Activity({ call, team, visits, refreshedAt, openVisit, openSchoo
                 const showChanges = i.action === 'visit.update' && changes.length > 0;
                 return (
                   <div className={'act-row ' + kind} key={i.id}>
-                    <div className="act-time">{timeLabel(i.at)}</div>
+                    <time className="act-time" dateTime={i.at} title={exact(i.at)}>{timeLabel(i.at)}</time>
                     <div className={'avatar' + (i.actor.role === 'admin' ? ' admin' : '')} style={{ width: 28, height: 28, fontSize: 11 }}>{i.actor.role === 'admin' ? 'A' : initials(i.actor.name) || '?'}</div>
                     <div style={{ minWidth: 0 }}>
                       <div className="act-text">{text}</div>

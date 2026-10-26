@@ -315,3 +315,19 @@ test('the activity log records who did what, without PINs', async () => {
   const p2 = (await req('/activity?limit=2&before=' + p1.before, { token: admin2 })).body;
   assert.ok(p1.more && p2.items[0].id < p1.items[1].id);
 });
+
+test('visits carry entered and last-updated timestamps with who entered them', async () => {
+  const { token, user } = (await req('/login', { body: { name: 'Kabir Shah', pin: '5791' } })).body;
+  const before = Date.now();
+  const v = (await req('/visits', { body: visit(), token })).body;
+  assert.equal(v.enteredBy, user.name);
+  assert.ok(Date.parse(v.createdAt) >= before - 1000 && Date.parse(v.createdAt) <= Date.now() + 1000);
+  assert.equal(v.updatedAt, v.createdAt);
+  await new Promise(r => setTimeout(r, 20));
+  const u = (await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'later' }, token })).body;
+  assert.equal(u.createdAt, v.createdAt);
+  assert.ok(Date.parse(u.updatedAt) > Date.parse(v.createdAt));
+  const listed = (await req('/visits', { token })).body.find(x => x.id === v.id);
+  assert.equal(listed.enteredBy, user.name);
+  assert.equal(listed.updatedAt, u.updatedAt);
+});

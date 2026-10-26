@@ -121,6 +121,8 @@ export function rowToVisit(r) {
     id: r.id, date: r.date, time: r.time, school: r.school, location: r.location, zone: r.zone, students: r.students,
     by: r.by_name, metName: r.met_name, metRole: r.met_role, coordName: r.coord_name, coordPhone: r.coord_phone, coordEmail: r.coord_email,
     notes: r.notes, status: r.status, followUp: r.follow_up, createdBy: r.created_by || null,
+    // When the visit reached the server, who entered it, and when it last changed.
+    createdAt: r.created_at || null, updatedAt: r.updated_at || null, enteredBy: r.entered_by_name ?? null,
     geo: r.lat == null ? null : { lat: r.lat, lng: r.lng, acc: r.geo_acc ?? 0 }
   };
 }

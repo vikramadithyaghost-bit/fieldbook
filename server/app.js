@@ -100,7 +100,8 @@ export function createApp(db, { adminPin = '0000' } = {}) {
 
   // Photos are listed on each visit as URLs; the bytes are served separately.
   const photosOf = id => db.prepare('SELECT id FROM photos WHERE visit_id = ? ORDER BY created_at, id').all(id).map(p => ({ id: p.id, url: '/api/photos/' + p.id }));
-  const getVisit = id => { const r = db.prepare('SELECT * FROM visits WHERE id = ?').get(id); return r && { ...rowToVisit(r), photos: photosOf(id) }; };
+  const VISIT_SELECT = 'SELECT v.*, m.name AS entered_by_name FROM visits v LEFT JOIN members m ON m.id = v.created_by';
+  const getVisit = id => { const r = db.prepare(VISIT_SELECT + ' WHERE v.id = ?').get(id); return r && { ...rowToVisit(r), photos: photosOf(id) }; };
   const addPhotos = (visitId, photos) => {
     const ins = db.prepare('INSERT INTO photos (id, visit_id, mime, data, created_at) VALUES (?, ?, ?, ?, ?)');
     photos.forEach(p => ins.run(randomUUID(), visitId, p.mime, p.data, new Date().toISOString()));
@@ -113,7 +114,7 @@ export function createApp(db, { adminPin = '0000' } = {}) {
       if (!byVisit.has(p.visit_id)) byVisit.set(p.visit_id, []);
       byVisit.get(p.visit_id).push({ id: p.id, url: '/api/photos/' + p.id });
     }
-    res.json(db.prepare('SELECT * FROM visits ORDER BY date DESC, time DESC').all().map(r => ({ ...rowToVisit(r), photos: byVisit.get(r.id) || [] })));
+    res.json(db.prepare(VISIT_SELECT + ' ORDER BY v.date DESC, v.time DESC').all().map(r => ({ ...rowToVisit(r), photos: byVisit.get(r.id) || [] })));
   });
 
   // Photo ids are random UUIDs, so an <img> can load them without a sign-in header.
