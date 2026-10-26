@@ -196,7 +196,7 @@ function Overview({ visits, inP, filtered, period, team, zoneFilter, setZoneFilt
     { label: 'Students reached', value: fmtNum(students), sub: 'across visited schools' },
     { label: 'Open follow-ups', value: openFu.length, sub: 'all time' },
     { label: 'Overdue', value: overdue.length, sub: 'follow-up date passed', color: overdue.length ? 'var(--bad)' : undefined },
-    { label: 'Not interested', value: filtered.filter(v => v.status === 'notinterested').length, sub: periodName }
+    { label: 'Not interested', value: filtered.filter(v => v.status === 'notinterested').length, sub: periodName, color: filtered.some(v => v.status === 'notinterested') ? 'var(--bad)' : undefined }
   ];
 
   return (
@@ -290,7 +290,7 @@ function Schools({ all, list, zoneFilter, statusFilter, q, page, setPage, select
 
   return (
     <main className="a-main">
-      <div className="kpis">{kpis.map(([l, v]) => <div className="kpi" key={l}><div className="l">{l}</div><div className="v">{v}</div></div>)}</div>
+      <div className="kpis">{kpis.map(([l, v]) => <div className="kpi" key={l}><div className="l">{l}</div><div className="v" style={l === 'Not interested' && +v > 0 ? { color: 'var(--bad)' } : undefined}>{v}</div></div>)}</div>
       <section className="tbl-card">
         <div className="tbl-bar">
           <h2 style={{ margin: '0 auto 0 0', fontSize: 15, fontWeight: 600 }}>All schools <span style={{ fontWeight: 400, color: 'var(--ink-3)', fontSize: 13 }}>· {n} of {all.length}</span></h2>
