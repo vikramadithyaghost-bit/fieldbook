@@ -272,3 +272,46 @@ test('a member allowed to edit all visits can edit (not delete) anyone\'s visit'
   assert.equal((await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'again' }, token: s.token })).status, 403);
   assert.equal((await req('/members', { token: admin })).body.find(m => m.id === suresh.id).canEditAll, false);
 });
+
+test('the activity log records who did what, without PINs', async () => {
+  const admin = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
+  const added = (await req('/members', { body: { name: 'Log Tester' }, token: admin })).body;
+  await req('/login', { body: { name: 'Log Tester', pin: added.pin === '0001' ? '0002' : '0001' } }); // wrong PIN
+  const me = (await req('/login', { body: { name: 'Log Tester', pin: added.pin } })).body.token;
+  const v = (await req('/visits', { body: visit({ school: 'Logged School', status: 'followup', followUp: '2026-12-01', newPhotos: [PNG] }), token: me })).body;
+  await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'New notes', students: '75' }, token: me });
+  await req('/visits/' + v.id, { method: 'PATCH', body: { status: 'done', followUp: '' }, token: me });
+  await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'New notes' }, token: me }); // no real change: not logged
+  await req('/members/' + added.id, { method: 'PATCH', body: { canEditAll: true }, token: admin });
+  await req(`/members/${added.id}/reset-pin`, { method: 'POST', token: admin });
+  await req('/activity/export', { body: { format: 'xlsx', page: 'schools', rows: 12 }, token: admin });
+  const admin2 = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
+  await req('/visits/' + v.id, { method: 'DELETE', token: admin2 });
+
+  // Members can't read it.
+  assert.equal((await req('/activity', { token: me })).status, 401); // PIN reset signed them out
+  const { items } = (await req('/activity?limit=200', { token: admin2 })).body;
+  const mine = items.filter(i => i.target?.label === 'Logged School' || i.target?.label === 'Log Tester' || i.actor.name === 'Log Tester' || i.action === 'export');
+  const actions = mine.map(i => i.action).reverse();
+  assert.deepEqual(actions, ['member.add', 'signin.failed', 'signin', 'visit.create', 'visit.update', 'visit.done', 'member.edit_all', 'member.pin_reset', 'export', 'visit.delete']);
+
+  const update = mine.find(i => i.action === 'visit.update');
+  assert.equal(update.actor.name, 'Log Tester');
+  assert.deepEqual(update.details.changes.map(c => c.field).sort(), ['Notes', 'Students']);
+  assert.deepEqual(update.details.changes.find(c => c.field === 'Students'), { field: 'Students', from: '1250', to: '75' });
+  assert.equal(mine.find(i => i.action === 'visit.create').details.photos, 1);
+  assert.equal(mine.find(i => i.action === 'visit.delete').actor.name, 'Admin');
+  assert.equal(mine.find(i => i.action === 'member.edit_all').details.on, true);
+  assert.ok(!JSON.stringify(items).includes(added.pin), 'PINs must never be logged');
+
+  // Filters and paging.
+  const visitsOnly = (await req('/activity?type=visits&limit=200', { token: admin2 })).body.items;
+  assert.ok(visitsOnly.length && visitsOnly.every(i => i.action.startsWith('visit.')));
+  const byTester = (await req('/activity?actor=' + added.id + '&limit=200', { token: admin2 })).body.items;
+  assert.ok(byTester.every(i => i.actor.id === added.id));
+  const search = (await req('/activity?q=Logged%20School&limit=200', { token: admin2 })).body.items;
+  assert.equal(search.length, 4);
+  const p1 = (await req('/activity?limit=2', { token: admin2 })).body;
+  const p2 = (await req('/activity?limit=2&before=' + p1.before, { token: admin2 })).body;
+  assert.ok(p1.more && p2.items[0].id < p1.items[1].id);
+});

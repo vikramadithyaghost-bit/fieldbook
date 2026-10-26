@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { STATUSES, ago } from '../shared/domain.js';
 import { SEED_TEAM, SEED_PINS, seedVisits } from './seed.js';
+import { initActivity } from './activity.js';
 
 export function openDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -57,6 +58,7 @@ export function openDb(file) {
     );
   `);
   allowNotInterested(db);
+  initActivity(db);
   // Columns added after go-live: school GPS position.
   const cols = new Set(db.prepare('PRAGMA table_info(visits)').all().map(c => c.name));
   // Members the admin allows to edit everyone's visits (e.g. a supervisor).

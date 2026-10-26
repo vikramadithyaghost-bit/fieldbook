@@ -4,9 +4,10 @@ import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, statusLabel, 
 import { api, ApiError, save, store } from '../lib/api';
 import { groupSchools, schoolsCsv, schoolsXlsx, visitsCsv, visitsXlsx, type School } from '../lib/schools';
 import { geoLabel, mapsUrl } from '../lib/media';
+import { Activity } from './Activity';
 import '../styles/admin.css';
 
-type View = 'overview' | 'schools' | 'members';
+type View = 'overview' | 'schools' | 'members' | 'activity';
 const TOKEN_KEY = 'fieldbook-admin-token';
 const REFRESH_MS = 30_000;
 
@@ -94,7 +95,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   const q = query.trim().toLowerCase();
 
   const go = (v: View) => { setView(v); setDetailId(null); setSchoolKey(null); };
-  const title = { overview: 'Overview', schools: 'Schools', members: 'Team members' }[view];
+  const title = { overview: 'Overview', schools: 'Schools', members: 'Team members', activity: 'Activity log' }[view];
 
   // Overview: KPIs follow every filter; zone and member panels follow the period only.
   const inP = visits.filter(v => inPeriod(v, period));
@@ -108,10 +109,15 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   const [exporting, setExporting] = useState(false);
   const newestFirst = <T extends { date: string; time: string }>(list: T[]) => [...list].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   const exportList = () => view === 'schools' ? newestFirst(schoolList.map(r => ({ ...r, date: r.last.date, time: r.last.time }))) : newestFirst(filtered);
-  const exportCsv = () => view === 'schools' ? schoolsCsv(exportList() as School[]) : visitsCsv(exportList() as Visit[]);
+  const logExport = (format: 'csv' | 'xlsx', rows: number) => {
+    const filters = [period !== 'all' && view === 'overview' && 'period: ' + period, zoneFilter, memberFilter, statusFilter !== 'all' && statusLabel(statusFilter), q && `"${q}"`].filter(Boolean).join(' · ');
+    call('/activity/export', { body: { format, page: view, rows, filters } }).catch(() => {});
+  };
+  const exportCsv = () => { const list = exportList(); view === 'schools' ? schoolsCsv(list as School[]) : visitsCsv(list as Visit[]); logExport('csv', list.length); };
   const exportXlsx = async () => {
     setExporting(true);
-    try { await (view === 'schools' ? schoolsXlsx(exportList() as School[]) : visitsXlsx(exportList() as Visit[])); }
+    const list = exportList();
+    try { await (view === 'schools' ? schoolsXlsx(list as School[]) : visitsXlsx(list as Visit[])); logExport('xlsx', list.length); }
     catch { setLoadErr("Couldn't create the Excel file"); }
     finally { setExporting(false); }
   };
@@ -124,7 +130,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
           <div style={{ minWidth: 0 }}><div className="n">Fieldbook</div><div className="d">Kanyakumari district</div></div>
         </div>
         <nav className="nav">
-          {([['overview', 'Overview', ''], ['schools', 'Schools', schools.length], ['members', 'Members', team.length]] as const).map(([k, l, c]) => (
+          {([['overview', 'Overview', ''], ['schools', 'Schools', schools.length], ['members', 'Members', team.length], ['activity', 'Activity', '']] as const).map(([k, l, c]) => (
             <button key={k} className={view === k ? 'on' : ''} onClick={() => go(k)}><span className="ind" /><span style={{ flex: 1 }}>{l}</span><span className="c">{c}</span></button>
           ))}
         </nav>
@@ -142,7 +148,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
               {([['today', 'Today'], ['week', '7 days'], ['month', 'Month'], ['all', 'All']] as const).map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}
             </div>
           )}
-          {view !== 'members' && <>
+          {(view === 'overview' || view === 'schools') && <>
             <div className="a-search">
               <span className="search-ico" />
               <input type="search" placeholder={view === 'schools' ? 'Search school, coordinator, phone' : 'Search school, place, person'} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} />
@@ -165,6 +171,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
             onZone={z => { setZoneFilter(z); setPage(1); }} onStatus={s => { setStatusFilter(s); setPage(1); }}
             clear={() => { setZoneFilter(''); setMemberFilter(''); setStatusFilter('all'); setQuery(''); setPage(1); }} open={setSchoolKey} />
         )}
+        {view === 'activity' && <Activity call={call} team={team} visits={visits} refreshedAt={loadedAt} openVisit={id => act.open(id)} openSchool={setSchoolKey} />}
         {view === 'members' && <Members team={team} visits={visits} call={call} refresh={refresh} setTeam={setTeam} onRemoved={n => memberFilter === n && setMemberFilter('')} />}
       </div>
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { iso, validateVisit } from '../shared/domain.js';
 import { rowToVisit, cleanVisit, insertVisit } from './db.js';
+import { listActivity, logActivity, visitChanges } from './activity.js';
 
 const MAX_FAILS = 5, LOCK_MS = 5 * 60 * 1000;
 const MAX_PHOTOS = 4, MAX_PHOTO_BYTES = 3 * 1024 * 1024;
@@ -26,7 +27,8 @@ export function createApp(db, { adminPin = '0000' } = {}) {
   // --- PIN brute-force protection: 5 wrong attempts per IP + account locks it for 5 minutes.
   const fails = new Map();
   const lockedFor = key => { const f = fails.get(key); return f && f.until > Date.now() ? Math.ceil((f.until - Date.now()) / 60000) : 0; };
-  const fail = key => { const f = fails.get(key) || { n: 0, until: 0 }; f.n += 1; if (f.n >= MAX_FAILS) { f.n = 0; f.until = Date.now() + LOCK_MS; } fails.set(key, f); };
+  const fail = key => { const f = fails.get(key) || { n: 0, until: 0 }; f.n += 1; let locked = false; if (f.n >= MAX_FAILS) { f.n = 0; f.until = Date.now() + LOCK_MS; locked = true; } fails.set(key, f); return locked; };
+  const log = (who, action, target, details) => logActivity(db, who, action, target, details);
 
   const newSession = (role, memberId) => {
     const token = randomBytes(24).toString('base64url');
@@ -64,21 +66,33 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const key = req.ip + '|' + name.toLowerCase(), wait = lockedFor(key);
     if (wait) return res.status(429).json({ error: `Too many attempts. Try again in ${wait} min.` });
     const m = db.prepare('SELECT id, name, pin, can_edit_all FROM members WHERE active = 1 AND name = ? COLLATE NOCASE').get(name);
-    if (!m || m.pin !== pin) { fail(key); return res.status(401).json({ error: 'Incorrect PIN. Ask your admin to reset it.' }); }
+    if (!m || m.pin !== pin) {
+      const who = { role: m ? 'member' : 'unknown', id: m?.id, name: m?.name || name.slice(0, 100) };
+      log(who, 'signin.failed');
+      if (fail(key)) log(who, 'signin.locked');
+      return res.status(401).json({ error: 'Incorrect PIN. Ask your admin to reset it.' });
+    }
     fails.delete(key);
+    log({ role: 'member', id: m.id, name: m.name }, 'signin');
     res.json({ token: newSession('member', m.id), user: { id: m.id, name: m.name, canEditAll: !!m.can_edit_all } });
   });
 
   app.post('/api/admin/login', (req, res) => {
     const key = req.ip + '|admin', wait = lockedFor(key);
     if (wait) return res.status(429).json({ error: `Too many attempts. Try again in ${wait} min.` });
-    if (String(req.body?.pin || '') !== adminPin) { fail(key); return res.status(401).json({ error: 'Incorrect admin PIN' }); }
+    if (String(req.body?.pin || '') !== adminPin) {
+      log({ role: 'unknown', name: 'Someone' }, 'admin.signin.failed');
+      if (fail(key)) log({ role: 'unknown', name: 'Someone' }, 'admin.signin.locked');
+      return res.status(401).json({ error: 'Incorrect admin PIN' });
+    }
     fails.delete(key);
+    log({ role: 'admin' }, 'admin.signin');
     res.json({ token: newSession('admin', null) });
   });
 
   app.post('/api/logout', auth(), (req, res) => {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(req.session.token);
+    log(req.session, 'signout');
     res.json({ ok: true });
   });
 
@@ -121,6 +135,8 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     if (photos.length > MAX_PHOTOS) return res.status(400).json({ error: `Up to ${MAX_PHOTOS} photos per visit` });
     db.exec('BEGIN');
     try { insertVisit(db, v, req.session.memberId); addPhotos(v.id, photos); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+    log(req.session, 'visit.create', { id: v.id, label: v.school },
+      { date: v.date, zone: v.zone, status: v.status, followUp: v.followUp, visitedBy: v.by, photos: photos.length, located: !!v.geo });
     res.status(201).json(getVisit(v.id));
   });
 
@@ -143,24 +159,35 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     try { photos = decodePhotos(req.body.newPhotos); } catch (e) { return res.status(400).json({ error: e.message }); }
     const kept = photosOf(v.id).filter(p => !remove.includes(p.id)).length;
     if (kept + photos.length > MAX_PHOTOS) return res.status(400).json({ error: `Up to ${MAX_PHOTOS} photos per visit` });
+    let removed = 0;
     db.exec('BEGIN');
     try {
       db.prepare(`UPDATE visits SET date=?, time=?, school=?, location=?, zone=?, students=?, by_name=?, met_name=?, met_role=?, coord_name=?, coord_phone=?, coord_email=?, notes=?, status=?, follow_up=?, lat=?, lng=?, geo_acc=?, updated_at=? WHERE id=?`)
         .run(v.date, v.time, v.school, v.location, v.zone, v.students, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.notes, v.status, v.followUp,
           v.geo?.lat ?? null, v.geo?.lng ?? null, v.geo?.acc ?? null, new Date().toISOString(), v.id);
       const del = db.prepare('DELETE FROM photos WHERE id = ? AND visit_id = ?');
-      remove.forEach(id => del.run(id, v.id));
+      remove.forEach(id => { removed += del.run(id, v.id).changes; });
       addPhotos(v.id, photos);
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
+    const changes = visitChanges(rowToVisit(row), v);
+    if (changes.length || photos.length || removed) {
+      const markDone = isMarkDone(req.body) && row.status === 'followup';
+      const onBehalf = !isAuthor(req.session, row) && !markDone; // edited someone else's visit ("Edit all visits")
+      log(req.session, markDone ? 'visit.done' : 'visit.update', { id: v.id, label: v.school },
+        { changes, photosAdded: photos.length, photosRemoved: removed, ...(onBehalf ? { onBehalf: true } : {}) });
+    }
     res.json(getVisit(v.id));
   });
 
   app.delete('/api/visits/:id', auth(), (req, res) => {
-    const row = db.prepare('SELECT created_by FROM visits WHERE id = ?').get(req.params.id);
+    const row = db.prepare('SELECT * FROM visits WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Visit not found' });
     if (!isAuthor(req.session, row)) return res.status(403).json({ error: 'You can only delete visits you entered' });
+    const photoCount = db.prepare('SELECT COUNT(*) AS n FROM photos WHERE visit_id = ?').get(row.id).n;
     db.prepare('DELETE FROM visits WHERE id = ?').run(req.params.id);
+    log(req.session, 'visit.delete', { id: row.id, label: row.school },
+      { date: row.date, zone: row.zone, status: row.status, visitedBy: row.by_name, notes: row.notes.slice(0, 300), photos: photoCount });
     res.json({ ok: true });
   });
 
@@ -181,6 +208,7 @@ export function createApp(db, { adminPin = '0000' } = {}) {
       id = 'm-' + randomUUID();
       db.prepare('INSERT INTO members (id, name, pin, active, added) VALUES (?, ?, ?, 1, ?)').run(id, name, pin, iso(new Date()));
     }
+    log(req.session, prev ? 'member.readd' : 'member.add', { id, label: name });
     res.status(201).json(memberById(id));
   });
 
@@ -188,7 +216,9 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     if (typeof req.body?.canEditAll !== 'boolean') return res.status(400).json({ error: 'Nothing to change' });
     const r = db.prepare('UPDATE members SET can_edit_all = ? WHERE id = ? AND active = 1').run(req.body.canEditAll ? 1 : 0, req.params.id);
     if (!r.changes) return res.status(404).json({ error: 'Member not found' });
-    res.json(memberById(req.params.id));
+    const m = memberById(req.params.id);
+    log(req.session, 'member.edit_all', { id: m.id, label: m.name }, { on: m.canEditAll });
+    res.json(m);
   });
 
   app.post('/api/members/:id/reset-pin', auth('admin'), (req, res) => {
@@ -197,7 +227,9 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const pin = genPin(m.pin);
     db.prepare('UPDATE members SET pin = ? WHERE id = ?').run(pin, m.id);
     db.prepare('DELETE FROM sessions WHERE member_id = ?').run(m.id);
-    res.json(memberById(m.id));
+    const out = memberById(m.id);
+    log(req.session, 'member.pin_reset', { id: m.id, label: out.name });
+    res.json(out);
   });
 
   // Removing blocks sign-in (and ends open sessions) but keeps the member's past visits.
@@ -205,6 +237,20 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const r = db.prepare('UPDATE members SET active = 0 WHERE id = ? AND active = 1').run(req.params.id);
     if (!r.changes) return res.status(404).json({ error: 'Member not found' });
     db.prepare('DELETE FROM sessions WHERE member_id = ?').run(req.params.id);
+    log(req.session, 'member.remove', { id: req.params.id, label: memberById(req.params.id)?.name });
+    res.json({ ok: true });
+  });
+
+  // --- Activity log (admin).
+  app.get('/api/activity', auth('admin'), (req, res) => {
+    const { before, limit, actor, type, q } = req.query;
+    res.json(listActivity(db, { before, limit, actor: actor && String(actor), type: type && String(type), q: q && String(q).slice(0, 100) }));
+  });
+
+  // Exports are built in the browser, so the dashboard reports them here.
+  app.post('/api/activity/export', auth('admin'), (req, res) => {
+    const format = req.body?.format === 'csv' ? 'csv' : 'xlsx', page = req.body?.page === 'schools' ? 'schools' : 'overview';
+    log(req.session, 'export', null, { format, page, rows: Math.max(0, +req.body?.rows || 0), filters: String(req.body?.filters || '').slice(0, 200) });
     res.json({ ok: true });
   });
 

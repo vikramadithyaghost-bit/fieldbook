@@ -5,7 +5,7 @@ School-visit logging for a field team in Kanyakumari district, plus a web dashbo
 | URL | Who | What |
 | --- | --- | --- |
 | `/` | Field team (phones) | Sign in with name + PIN, log visits in four steps, browse all team visits, edit or delete your own, per-member stats. Works offline. |
-| `/admin` | Admin (desktop) | Overview (KPIs, visits by zone, team, follow-ups due), Schools (paged, sortable table, detail drawer with edit/delete, Excel and CSV export), Members (add, PIN reset, remove). |
+| `/admin` | Admin (desktop) | Overview (KPIs, visits by zone, team, follow-ups due), Schools (paged, sortable table, detail drawer with edit/delete, Excel and CSV export), Members (add, PIN reset, remove, edit-all permission), Activity log. |
 
 The original Claude Design prototypes and the design chat are kept in `project/` and `chats/` for reference.
 
@@ -44,6 +44,7 @@ Locally: admin PIN `0000`; demo field login **Asha Verma · 2468**.
 - **Visit outcome:** each visit ends as **Done**, **Follow-up needed** (with a date) or **Not interested** (the school declined; the notes box asks for the reason). Not interested shows in red, can be filtered on the phone and in Schools, is counted on Overview and Schools, and is included in exports. Databases from before this status existed are upgraded in place on first start, keeping every visit and photo.
 - **Editing your own visits:** on the phone, a visit you entered shows **Edit visit** and **Delete**. Editing reopens the four-step form with everything filled in (photos can be removed or added). Both work offline and sync later. Teammates' visits can't be edited or deleted, though anyone can still mark a follow-up done; the server enforces this.
 - **Edit all visits:** on Members, the admin can switch on **Edit all visits** for a member (e.g. a supervisor). That person sees **Edit visit** on everyone's visits on their phone; deleting stays limited to their own. The change applies on their next sync, with no re-login.
+- **Activity log:** the dashboard's **Activity** page lists everything people do, newest first and grouped by day: visits added, edited (each changed field, old → new), follow-ups marked done and deletions; sign-ins, sign-outs, wrong PINs and lockouts; team changes; and Excel/CSV exports. Filter by person or type, search, and open the visit from an entry. PINs and photo data are never logged. Stored in the `activity` table.
 - **Admin edits:** in Schools, open a school to view, edit or delete any visit, or delete the school with all its visits. Deletes ask for confirmation and can't be undone.
 - **Data resets:** `RESETS` in `server/db.js` lists one-off clean-ups that run once on the next start (the first clears all test visits before go-live, keeping team members).
 
