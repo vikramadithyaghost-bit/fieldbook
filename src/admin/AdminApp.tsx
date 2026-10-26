@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Geo, Member, Period, Photo, Visit } from '../../shared/domain';
-import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
+import { ZONES, ago, dLabel, daysFrom, fmtNum, inPeriod, initials, statusLabel, validateVisit, zonePlace, zoneShort } from '../../shared/domain.js';
 import { api, ApiError, save, store } from '../lib/api';
 import { groupSchools, schoolsCsv, schoolsXlsx, visitsCsv, visitsXlsx, type School } from '../lib/schools';
 import { geoLabel, mapsUrl } from '../lib/media';
@@ -51,7 +51,7 @@ function Dashboard({ token, signOut }: { token: string; signOut: () => void }) {
   const [query, setQuery] = useState('');
   const [zoneFilter, setZoneFilter] = useState('');
   const [memberFilter, setMemberFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'followup'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | Visit['status']>('all');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailEdit, setDetailEdit] = useState(false);
   const [schoolKey, setSchoolKey] = useState<string | null>(null);
@@ -195,7 +195,8 @@ function Overview({ visits, inP, filtered, period, team, zoneFilter, setZoneFilt
     { label: 'Schools covered', value: schoolCount, sub: 'unique schools' },
     { label: 'Students reached', value: fmtNum(students), sub: 'across visited schools' },
     { label: 'Open follow-ups', value: openFu.length, sub: 'all time' },
-    { label: 'Overdue', value: overdue.length, sub: 'follow-up date passed', color: overdue.length ? 'var(--bad)' : undefined }
+    { label: 'Overdue', value: overdue.length, sub: 'follow-up date passed', color: overdue.length ? 'var(--bad)' : undefined },
+    { label: 'Not interested', value: filtered.filter(v => v.status === 'notinterested').length, sub: periodName }
   ];
 
   return (
@@ -269,7 +270,7 @@ const SCHOOL_COLS: [keyof School | 'last', string, boolean?][] = [
 
 function Schools({ all, list, zoneFilter, statusFilter, q, page, setPage, selected, onZone, onStatus, clear, open }: {
   all: School[]; list: School[]; zoneFilter: string; statusFilter: string; q: string; page: number; setPage: (p: number) => void; selected: string | null;
-  onZone: (z: string) => void; onStatus: (s: 'all' | 'done' | 'followup') => void; clear: () => void; open: (k: string) => void;
+  onZone: (z: string) => void; onStatus: (s: 'all' | Visit['status']) => void; clear: () => void; open: (k: string) => void;
 }) {
   const [sort, setSort] = useState<string>('last');
   const [dir, setDir] = useState(-1);
@@ -284,7 +285,7 @@ function Schools({ all, list, zoneFilter, statusFilter, q, page, setPage, select
 
   const kpis = [
     ['Schools', all.length], ['Students', fmtNum(all.reduce((s, r) => s + (+r.students || 0), 0))],
-    ['Follow-up open', all.filter(r => r.status === 'followup').length], ['Zones covered', new Set(all.map(r => r.zone).filter(Boolean)).size + ' / ' + ZONES.length]
+    ['Follow-up open', all.filter(r => r.status === 'followup').length], ['Not interested', all.filter(r => r.status === 'notinterested').length], ['Zones covered', new Set(all.map(r => r.zone).filter(Boolean)).size + ' / ' + ZONES.length]
   ];
 
   return (
@@ -294,7 +295,7 @@ function Schools({ all, list, zoneFilter, statusFilter, q, page, setPage, select
         <div className="tbl-bar">
           <h2 style={{ margin: '0 auto 0 0', fontSize: 15, fontWeight: 600 }}>All schools <span style={{ fontWeight: 400, color: 'var(--ink-3)', fontSize: 13 }}>· {n} of {all.length}</span></h2>
           <select value={zoneFilter} onChange={e => onZone(e.target.value)} aria-label="Zone"><option value="">All zones</option>{ZONES.map(z => <option key={z} value={z}>{z}</option>)}</select>
-          <select value={statusFilter} onChange={e => onStatus(e.target.value as 'all')} aria-label="Status"><option value="all">Any status</option><option value="done">Done</option><option value="followup">Follow-up open</option></select>
+          <select value={statusFilter} onChange={e => onStatus(e.target.value as 'all')} aria-label="Status"><option value="all">Any status</option><option value="done">Done</option><option value="followup">Follow-up open</option><option value="notinterested">Not interested</option></select>
           {(zoneFilter || statusFilter !== 'all' || q) && <button className="link-btn" style={{ fontSize: 13, padding: '0 4px' }} onClick={clear}>Clear</button>}
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -320,7 +321,8 @@ function Schools({ all, list, zoneFilter, statusFilter, q, page, setPage, select
                     <td style={{ whiteSpace: 'nowrap' }}><div>{dLabel(r.last.date)}</div><div style={{ fontSize: 12, color: 'var(--ink-4)' }}>{r.last.by}</div></td>
                     <td>{r.membersLabel}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      {r.status === 'done' ? <span className="badge done">Done</span> : <span className={'badge ' + (od ? 'overdue' : 'follow')}>Follow-up {od ? 'overdue' : dLabel(r.followUp)}</span>}
+                      {r.status === 'done' ? <span className="badge done">Done</span> : r.status === 'notinterested' ? <span className="badge no">Not interested</span>
+                        : <span className={'badge ' + (od ? 'overdue' : 'follow')}>Follow-up {od ? 'overdue' : dLabel(r.followUp)}</span>}
                     </td>
                   </tr>
                 );
@@ -472,7 +474,7 @@ function Coordinator({ name, phone, email }: { name: string; phone: string; emai
   );
 }
 
-const statusText = (v: { status: string; followUp: string }) => v.status === 'followup' ? 'Follow-up · ' + dLabel(v.followUp, true) : 'Done';
+const statusText = (v: { status: Visit['status']; followUp: string }) => v.status === 'followup' ? 'Follow-up · ' + dLabel(v.followUp, true) : statusLabel(v.status);
 
 export interface VisitActions {
   update: (id: string, patch: Partial<Visit>) => Promise<void>;
@@ -541,8 +543,8 @@ function SchoolDrawer({ s, close, act }: { s?: School; close: () => void; act: V
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 13 }}>
                 <b style={{ fontWeight: 600 }}>{h.by}</b><span style={{ color: 'var(--ink-3)' }}>met {h.metName}{h.metRole ? ' (' + h.metRole + ')' : ''}</span>
-                {h.status === 'followup' ? <span className="badge follow" style={{ fontSize: 11, padding: '1px 6px', borderRadius: 5 }}>Follow-up {dLabel(h.followUp)}</span>
-                  : <span className="badge done" style={{ fontSize: 11, padding: '1px 6px', borderRadius: 5 }}>Done</span>}
+                <span className={'badge ' + ({ done: 'done', followup: 'follow', notinterested: 'no' } as const)[h.status]} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 5 }}>
+                  {h.status === 'followup' ? 'Follow-up ' + dLabel(h.followUp) : statusLabel(h.status)}</span>
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--ink-2)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{h.notes || 'No notes.'}</div>
               <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
@@ -662,7 +664,7 @@ function VisitEditor({ v, act, done, close }: { v: Visit; act: VisitActions; don
         <label>Notes / outcome<textarea rows={4} value={d.notes} onChange={set('notes')} /></label>
         <div className="two">
           <label>Status *<select value={d.status} onChange={e => { const st = e.target.value as Visit['status']; setD(x => ({ ...x, status: st, followUp: st === 'followup' ? x.followUp || ago(-7) : x.followUp })); }}>
-            <option value="done">Done</option><option value="followup">Follow-up needed</option></select></label>
+            <option value="done">Done</option><option value="followup">Follow-up needed</option><option value="notinterested">Not interested</option></select></label>
           {d.status === 'followup' && <label>Follow-up date *<input type="date" className={cls('followUp')} value={d.followUp} onChange={set('followUp')} /><E k="followUp" /></label>}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Geo, Period, Photo, Visit } from '../../shared/domain';
-import { ZONES, ago, dLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
+import { ZONES, ago, dLabel, statusLabel, fmtNum, inPeriod, initials, iso, validateVisit, zoneShort } from '../../shared/domain.js';
 import { useFieldStore } from './useFieldStore';
 import { MAX_PHOTOS, compressPhoto, currentPosition, geoLabel, mapsUrl } from '../lib/media';
 import '../styles/field.css';
@@ -93,6 +93,7 @@ function Badges({ v }: { v: Visit }) {
   return <>
     {v.status === 'done' && <span className="badge done">Done</span>}
     {v.status === 'followup' && <span className="badge follow">Follow-up {dLabel(v.followUp)}</span>}
+    {v.status === 'notinterested' && <span className="badge no">Not interested</span>}
     {v.pending && <span className="badge pending">Not synced</span>}
   </>;
 }
@@ -100,7 +101,7 @@ function Badges({ v }: { v: Visit }) {
 function Home({ fs, open, newVisit }: { fs: FS; open: (id: string) => void; newVisit: () => void }) {
   const [tab, setTab] = useState<'visits' | 'team'>('visits');
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | 'done' | 'followup'>('all');
+  const [status, setStatus] = useState<'all' | Visit['status']>('all');
   const [member, setMember] = useState('');
   const [zone, setZone] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -151,7 +152,7 @@ function Home({ fs, open, newVisit }: { fs: FS; open: (id: string) => void; newV
               <div className="card filters">
                 <div className="caps">Status</div>
                 <div className="chips">
-                  {([['all', 'All'], ['done', 'Done'], ['followup', 'Follow-up']] as const).map(([k, l]) => <button key={k} className={status === k ? 'on' : ''} onClick={() => setStatus(k)}>{l}</button>)}
+                  {([['all', 'All'], ['done', 'Done'], ['followup', 'Follow-up'], ['notinterested', 'Not interested']] as const).map(([k, l]) => <button key={k} className={status === k ? 'on' : ''} onClick={() => setStatus(k)}>{l}</button>)}
                 </div>
                 <div className="caps">Visited by</div>
                 <select className="f-input" value={member} onChange={e => setMember(e.target.value)}>
@@ -322,20 +323,25 @@ function VisitForm({ fs, close, flash, edit }: { fs: FS; close: () => void; flas
         </>}
 
         {step === 3 && <>
-          <div className="f-field"><label className="f-label">Notes / outcome</label><textarea className="f-input" rows={5} value={d.notes || ''} onChange={set('notes')} placeholder="What was discussed, agreed, next steps" /></div>
           <div className="f-field" style={{ gap: 8 }}>
             <label className="f-label">Visit status *</label>
             <div className="status-pick">
               <button className={d.status === 'done' ? 'on' : ''} onClick={() => setD(x => ({ ...x, status: 'done' }))}>Done</button>
               <button className={d.status === 'followup' ? 'on' : ''} onClick={() => setD(x => ({ ...x, status: 'followup', followUp: x.followUp || ago(-7) }))}>Follow-up needed</button>
+              <button className={'no' + (d.status === 'notinterested' ? ' on' : '')} onClick={() => setD(x => ({ ...x, status: 'notinterested' }))}>Not interested</button>
             </div>
           </div>
           {d.status === 'followup' && (
             <div className="f-field"><label className="f-label">Follow-up date *</label><input type="date" className={field('followUp')} style={{ fontSize: 15, padding: '0 10px' }} value={d.followUp || ''} onChange={set('followUp')} /><E k="followUp" /></div>
           )}
+          <div className="f-field">
+            <label className="f-label">{d.status === 'notinterested' ? 'Reason / notes' : 'Notes / outcome'}</label>
+            <textarea className="f-input" rows={5} value={d.notes || ''} onChange={set('notes')}
+              placeholder={d.status === 'notinterested' ? 'Why did the school say no? e.g. budget, already has a provider' : 'What was discussed, agreed, next steps'} />
+          </div>
           <div className="review">
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{d.school}</div>
-            <div>{[d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, d.students && fmtNum(d.students) + ' students', d.geo && 'location pinned', d.newPhotos?.length && d.newPhotos.length + ' photo' + (d.newPhotos.length > 1 ? 's' : '')].filter(Boolean).join(' · ')}</div>
+            <div>{[statusLabel(d.status || 'done'), d.zone && zoneShort(d.zone), d.location, dLabel(d.date), d.by, d.metName && 'met ' + d.metName, d.students && fmtNum(d.students) + ' students', d.geo && 'location pinned', d.newPhotos?.length && d.newPhotos.length + ' photo' + (d.newPhotos.length > 1 ? 's' : '')].filter(Boolean).join(' · ')}</div>
           </div>
         </>}
       </div>

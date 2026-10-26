@@ -1,6 +1,6 @@
 import type { Visit } from '../../shared/domain';
 import type { Geo } from '../../shared/domain';
-import { iso } from '../../shared/domain.js';
+import { iso, statusLabel } from '../../shared/domain.js';
 import { mapsUrl } from './media';
 
 const geoCols = (g?: Geo | null) => (g ? [g.lat, g.lng, mapsUrl(g)] : ['', '', '']);
@@ -61,7 +61,7 @@ function download(name: string, header: string[], rows: unknown[][]) {
 export function visitsCsv(list: Visit[]) {
   download('school-visits',
     ['Date', 'Time', 'School', 'Location', 'Zone', 'Visited by', 'Met with', 'Role', 'Coordinator', 'Phone', 'Email', 'Students', 'Status', 'Follow-up date', 'Notes', 'Latitude', 'Longitude', 'Map link', 'Photos'],
-    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, v.status === 'followup' ? 'Follow-up' : 'Done', v.followUp, v.notes,
+    list.map(v => [v.date, v.time, v.school, v.location, v.zone, v.by, v.metName, v.metRole, v.coordName, v.coordPhone, v.coordEmail, v.students, statusLabel(v.status), v.followUp, v.notes,
       v.geo?.lat ?? '', v.geo?.lng ?? '', v.geo ? mapsUrl(v.geo) : '', (v.photos || []).length]));
 }
 
@@ -69,12 +69,12 @@ export function schoolsCsv(list: School[]) {
   download('schools',
     ['School', 'Location', 'Zone', 'Students', 'Coordinator', 'Phone', 'Email', 'Visits', 'Last visit', 'Last visited by', 'Members', 'Status', 'Next follow-up', 'Latitude', 'Longitude', 'Map link', 'Photos'],
     list.map(r => [r.school, r.location, r.zone, r.students, r.coordName, r.coordPhone, r.coordEmail, r.visitCount, r.last.date, r.last.by, r.membersLabel,
-      r.status === 'followup' ? 'Follow-up' : 'Done', r.followUp, ...geoCols(r.visits.find(v => v.geo)?.geo), r.visits.reduce((n, v) => n + (v.photos || []).length, 0)]));
+      statusLabel(r.status), r.followUp, ...geoCols(r.visits.find(v => v.geo)?.geo), r.visits.reduce((n, v) => n + (v.photos || []).length, 0)]));
 }
 
 // --- Excel (.xlsx) export. The writer is loaded only when someone exports.
 type XCell = import('./xlsx').Cell;
-const yesNo = (s: Visit['status']) => (s === 'followup' ? 'Follow-up' : 'Done');
+const yesNo = statusLabel;
 const mapCell = (g?: Geo | null): XCell => (g ? { link: mapsUrl(g), text: 'Open map' } : '');
 const photoCells = (v: Visit): XCell[] => [0, 1, 2, 3].map(i => v.photos?.[i] ? { link: location.origin + v.photos[i].url, text: 'Photo ' + (i + 1) } : '');
 const num = (s: string) => (s && /^\d+$/.test(s) ? +s : s);

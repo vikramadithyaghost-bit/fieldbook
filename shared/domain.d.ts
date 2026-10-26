@@ -1,4 +1,4 @@
-export type Status = 'done' | 'followup';
+export type Status = 'done' | 'followup' | 'notinterested';
 export type Period = 'today' | 'week' | 'month' | 'all';
 
 export interface Geo { lat: number; lng: number; acc: number }
@@ -38,6 +38,8 @@ export interface Member {
 }
 
 export const ZONES: string[];
+export const STATUSES: Status[];
+export function statusLabel(s: Status): string;
 export function zoneShort(z: string | undefined): string;
 export function zonePlace(z: string | undefined): string;
 export function iso(d: Date): string;

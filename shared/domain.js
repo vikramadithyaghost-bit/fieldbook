@@ -1,6 +1,8 @@
 // Domain constants and date helpers shared by the server and both front-ends.
 
 export const ZONES = ['Zone 1 — Nagercoil', 'Zone 2 — Thovalai', 'Zone 3 — Thuckalay', 'Zone 4 — Marthandam', 'Zone 5 — Kulasekaram', 'Zone 6 — Kanyakumari'];
+export const STATUSES = ['done', 'followup', 'notinterested'];
+export const statusLabel = s => ({ done: 'Done', followup: 'Follow-up', notinterested: 'Not interested' })[s] || s;
 export const zoneShort = z => (z || '—').split(' — ')[0];
 export const zonePlace = z => (z || '').split(' — ')[1] || '';
 
@@ -58,7 +60,7 @@ export function validateVisit(d, step) {
     if (d.coordEmail && !/^\S+@\S+\.\S+$/.test(d.coordEmail)) e.coordEmail = 'Check the email address';
   }
   if (all || step === 3) {
-    if (d.status !== 'done' && d.status !== 'followup') e.status = 'Pick a status';
+    if (!STATUSES.includes(d.status)) e.status = 'Pick a status';
     if (d.status === 'followup' && !d.followUp) e.followUp = 'Pick a follow-up date';
   }
   return e;

@@ -199,3 +199,48 @@ test('a live database from before photos/location upgrades in place', () => {
   db.close();
   fs.rmSync(file, { force: true });
 });
+
+test('a school can be marked not interested', async () => {
+  const { token } = (await req('/login', { body: { name: 'Neha Gupta', pin: '9083' } })).body;
+  const v = await req('/visits', { body: visit({ status: 'notinterested', followUp: '2026-12-01', notes: 'Already has a vendor' }), token });
+  assert.equal(v.status, 201);
+  assert.equal(v.body.status, 'notinterested');
+  assert.equal(v.body.followUp, '');
+  assert.equal((await req('/visits', { body: visit({ status: 'maybe' }), token })).status, 400);
+});
+
+test('upgrading the live database keeps visits and photos and allows not interested', () => {
+  const file = path.join(os.tmpdir(), 'fieldbook-status-' + process.pid + '.db');
+  fs.rmSync(file, { force: true });
+  // The exact layout the live server had before this change (CHECK allows only done/followup).
+  const old = new DatabaseSync(file);
+  old.exec(`PRAGMA foreign_keys = ON;
+    CREATE TABLE visits (id TEXT PRIMARY KEY, date TEXT NOT NULL, time TEXT NOT NULL DEFAULT '', school TEXT NOT NULL, location TEXT NOT NULL, zone TEXT NOT NULL,
+      class_counts TEXT NOT NULL DEFAULT '{}', students TEXT NOT NULL DEFAULT '', by_name TEXT NOT NULL, met_name TEXT NOT NULL, met_role TEXT NOT NULL DEFAULT '',
+      coord_name TEXT NOT NULL, coord_phone TEXT NOT NULL DEFAULT '', coord_email TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK (status IN ('done', 'followup')), follow_up TEXT NOT NULL DEFAULT '', created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE INDEX visits_date ON visits(date);
+    CREATE TABLE photos (id TEXT PRIMARY KEY, visit_id TEXT NOT NULL REFERENCES visits(id) ON DELETE CASCADE, mime TEXT NOT NULL, data BLOB NOT NULL, created_at TEXT NOT NULL);
+    ALTER TABLE visits ADD COLUMN lat REAL; ALTER TABLE visits ADD COLUMN lng REAL; ALTER TABLE visits ADD COLUMN geo_acc REAL;
+    INSERT INTO visits (id, date, school, location, zone, by_name, met_name, coord_name, status, follow_up, created_by, created_at, updated_at, lat, lng, geo_acc)
+      VALUES ('live1', '2026-10-24', 'Live School', 'Nagercoil', 'Zone 1 — Nagercoil', 'Asha Verma', 'HM', 'Coord', 'followup', '2026-11-01', 'm1', 'x', 'x', 8.17, 77.43, 9);
+    INSERT INTO photos VALUES ('p1', 'live1', 'image/png', x'89504E47', 'x');`);
+  old.close();
+
+  const db = openDb(file);
+  const row = db.prepare('SELECT * FROM visits WHERE id = ?').get('live1');
+  assert.equal(row.school, 'Live School');
+  assert.equal(row.follow_up, '2026-11-01');
+  assert.equal(row.created_by, 'm1');
+  assert.equal(row.lat, 8.17);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM photos WHERE visit_id = ?').get('live1').n, 1);
+  db.prepare("UPDATE visits SET status = 'notinterested' WHERE id = 'live1'").run();
+  assert.throws(() => db.prepare("UPDATE visits SET status = 'bogus' WHERE id = 'live1'").run());
+  // Cascade still works after the rebuild, and a second start doesn't rebuild again.
+  db.close();
+  const again = openDb(file);
+  again.prepare('DELETE FROM visits WHERE id = ?').run('live1');
+  assert.equal(again.prepare('SELECT COUNT(*) AS n FROM photos').get().n, 0);
+  again.close();
+  fs.rmSync(file, { force: true });
+});

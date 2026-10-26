@@ -48,6 +48,7 @@ button:disabled { cursor: default; }
 .badge.done { color: var(--ok); background: var(--ok-tint); }
 .badge.follow { color: var(--warn); background: var(--warn-tint); }
 .badge.overdue { color: var(--bad); background: var(--bad-tint); }
+.badge.no { color: var(--ink-2); background: #E6E7E9; }
 .badge.pending { color: var(--ink-3); background: var(--chip); }
 
 .avatar { border-radius: 50%; background: var(--chip); color: var(--ink-2); font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
