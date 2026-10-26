@@ -374,6 +374,10 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
       setTeam(team.map(x => x.id === m.id ? u : x)); setJustAdded({ name: m.name, pin: u.pin!, verb: 'has a new PIN' }); setRevealed(r => ({ ...r, [m.id]: true }));
     } catch (e) { setErr((e as Error).message); refresh(); }
   };
+  const toggleEditAll = async (m: Member) => {
+    try { const u = await call<Member>('/members/' + m.id, { method: 'PATCH', body: { canEditAll: !m.canEditAll } }); setTeam(team.map(x => x.id === m.id ? u : x)); }
+    catch (e) { setErr((e as Error).message); refresh(); }
+  };
   const remove = async (m: Member) => {
     try { await call('/members/' + m.id, { method: 'DELETE' }); setTeam(team.filter(x => x.id !== m.id)); onRemoved(m.name); } catch (e) { setErr((e as Error).message); refresh(); }
     setConfirmRemove(null);
@@ -402,7 +406,7 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', fontSize: 13, color: 'var(--ink-3)' }}>{team.length} member{team.length === 1 ? '' : 's'}</div>
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl" style={{ minWidth: 640, fontSize: 14 }}>
-            <thead><tr><th style={{ paddingLeft: 16 }}>Name</th><th>PIN</th><th className="r">Visits</th><th>Last visit</th><th /></tr></thead>
+            <thead><tr><th style={{ paddingLeft: 16 }}>Name</th><th>PIN</th><th className="r">Visits</th><th>Last visit</th><th title="Lets this member edit visits entered by anyone">Edit all visits</th><th /></tr></thead>
             <tbody>
               {[...team].sort((a, b) => a.name.localeCompare(b.name)).map(m => {
                 const vs = visits.filter(v => v.by === m.name), shown = !!revealed[m.id];
@@ -413,6 +417,12 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
                     <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="mono" style={{ fontSize: 15, letterSpacing: '.15em', width: 56 }}>{shown ? m.pin : '••••'}</span><button className="link-btn" style={{ fontSize: 13 }} onClick={() => setRevealed(r => ({ ...r, [m.id]: !r[m.id] }))}>{shown ? 'Hide' : 'Show'}</button></div></td>
                     <td className="r mono" style={{ verticalAlign: 'middle' }}>{vs.length}</td>
                     <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{last ? dLabel(last) : '—'}</td>
+                    <td style={{ verticalAlign: 'middle' }}>
+                      <label className="switch" title={m.canEditAll ? `${m.name} can edit everyone's visits` : `${m.name} can edit only their own visits`}>
+                        <input type="checkbox" checked={!!m.canEditAll} onChange={() => toggleEditAll(m)} aria-label={'Let ' + m.name + ' edit all visits'} />
+                        <span />
+                      </label>
+                    </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                       {confirmRemove === m.id ? (
                         <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -434,7 +444,7 @@ function Members({ team, visits, call, refresh, setTeam, onRemoved }: {
           </table>
         </div>
       </section>
-      <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-4)' }}>Removing a member blocks their sign-in. Their past visits stay in the records. Resetting a PIN signs the member out of the app.</p>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-4)' }}>Removing a member blocks their sign-in. Their past visits stay in the records. Resetting a PIN signs the member out of the app. <b style={{ fontWeight: 600 }}>Edit all visits</b> lets a member (e.g. a supervisor) edit anyone's visits on their phone; they can still delete only their own.</p>
     </main>
   );
 }

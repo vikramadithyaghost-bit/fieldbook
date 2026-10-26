@@ -35,6 +35,7 @@ export interface Member {
   name: string;
   pin?: string;
   added?: string;
+  canEditAll?: boolean;
 }
 
 export const ZONES: string[];

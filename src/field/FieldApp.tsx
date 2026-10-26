@@ -239,7 +239,7 @@ function VisitForm({ fs, close, flash, edit }: { fs: FS; close: () => void; flas
   useEffect(() => { scroller.current?.scrollTo(0, 0); }, [step]);
 
   const set = (k: keyof Visit) => (e: { target: { value: string } }) => { const val = e.target.value; setD(x => ({ ...x, [k]: val })); setErr(x => ({ ...x, [k]: '' })); };
-  const names = fs.team.map(m => m.name).includes(user) ? fs.team.map(m => m.name) : [user, ...fs.team.map(m => m.name)];
+  const names = [...new Set([user, ...(edit ? [edit.by] : []), ...fs.team.map(m => m.name)])];
   const field = (k: keyof Visit) => 'f-input' + (err[k] ? ' bad' : '');
   const E = ({ k }: { k: string }) => err[k] ? <div className="err-text">{err[k]}</div> : null;
 
@@ -406,18 +406,19 @@ function Detail({ fs, id, back, flash, edit }: { fs: FS; id: string; back: () =>
         {v.status === 'followup' && (
           <button className="btn-primary" style={{ height: 50 }} onClick={() => { fs.updateVisit(v.id, { status: 'done', followUp: '' }); flash('Marked as done'); }}>Mark follow-up done</button>
         )}
-        {fs.isMine(v) && (
-          <div className="own-actions">
+        {fs.canEdit(v) && (
+          <div className="own-actions" style={fs.isMine(v) ? undefined : { gridTemplateColumns: '1fr' }}>
             <button className="btn-ghost" onClick={edit}>Edit visit</button>
-            <button className="btn-ghost danger" onClick={() => {
+            {fs.isMine(v) && <button className="btn-ghost danger" onClick={() => {
               if (!confirm(`Delete this visit to ${v.school}? This can't be undone.`)) return;
               const stored = fs.deleteVisit(v.id);
               flash(!stored ? 'Phone storage is full · connect to sync' : fs.online ? 'Visit deleted' : 'Deleted · will sync later');
               back();
-            }}>Delete</button>
+            }}>Delete</button>}
           </div>
         )}
-        {!fs.isMine(v) && <div className="f-hint" style={{ textAlign: 'center' }}>Only {v.createdBy ? 'the person who entered this visit' : 'the admin'} can edit or delete it.</div>}
+        {fs.canEdit(v) && !fs.isMine(v) && <div className="f-hint" style={{ textAlign: 'center' }}>You can edit this visit because the admin lets you edit all visits.</div>}
+        {!fs.canEdit(v) && <div className="f-hint" style={{ textAlign: 'center' }}>Only {v.createdBy ? 'the person who entered this visit' : 'the admin'} can edit or delete it.</div>}
       </div>
     </div>
   );

@@ -59,6 +59,8 @@ export function openDb(file) {
   allowNotInterested(db);
   // Columns added after go-live: school GPS position.
   const cols = new Set(db.prepare('PRAGMA table_info(visits)').all().map(c => c.name));
+  // Members the admin allows to edit everyone's visits (e.g. a supervisor).
+  if (!db.prepare('PRAGMA table_info(members)').all().some(c => c.name === 'can_edit_all')) db.exec('ALTER TABLE members ADD COLUMN can_edit_all INTEGER NOT NULL DEFAULT 0');
   if (!cols.has('lat')) db.exec('ALTER TABLE visits ADD COLUMN lat REAL; ALTER TABLE visits ADD COLUMN lng REAL; ALTER TABLE visits ADD COLUMN geo_acc REAL;');
   return db;
 }

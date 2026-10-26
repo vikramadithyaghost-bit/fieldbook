@@ -6,7 +6,7 @@ import { api, ApiError, save, store } from '../lib/api';
 // that is replayed against the server whenever a connection is available.
 type Patch = Partial<Visit> & { removePhotos?: string[] };
 type Op = { kind: 'create'; visit: Visit } | { kind: 'update'; id: string; patch: Patch } | { kind: 'delete'; id: string };
-interface Auth { token: string; user: { id: string; name: string } }
+interface Auth { token: string; user: { id: string; name: string; canEditAll?: boolean } }
 
 const K = { auth: 'fieldbook-auth', visits: 'fieldbook-visits-cache', outbox: 'fieldbook-outbox', team: 'fieldbook-team-cache' };
 
@@ -64,7 +64,9 @@ export function useFieldStore(flash: (msg: string) => void) {
         }
         setOutbox(outboxRef.current.slice(1));
       }
-      const [vs, t] = await Promise.all([api<Visit[]>('/visits', { token: a.token }), api<Member[]>('/team')]);
+      const [vs, t, me] = await Promise.all([api<Visit[]>('/visits', { token: a.token }), api<Member[]>('/team'), api<{ user: Auth['user'] | null }>('/me', { token: a.token })]);
+      // Pick up permission changes the admin made since sign-in.
+      if (me.user && authRef.current?.token === a.token && !!me.user.canEditAll !== !!a.user.canEditAll) setAuth({ ...a, user: { ...a.user, canEditAll: !!me.user.canEditAll } });
       save(K.visits, vs);
       save(K.team, t);
       setServerVisits(vs);
@@ -119,6 +121,8 @@ export function useFieldStore(flash: (msg: string) => void) {
     isQueued: (id: string) => outboxRef.current.some(op => op.kind === 'create' && op.visit.id === id),
     /** Visits this person entered (or queued on this phone) can be edited and deleted by them. */
     isMine: (v: Visit) => !!auth && v.createdBy === auth.user.id,
+    /** Your own visits, or anyone's if the admin allowed you to edit all visits. */
+    canEdit: (v: Visit) => !!auth && (v.createdBy === auth.user.id || !!auth.user.canEditAll),
     deleteVisit: (id: string) => {
       const queued = outboxRef.current.some(op => op.kind === 'create' && op.visit.id === id);
       const rest = outboxRef.current.filter(op => !(op.kind === 'create' && op.visit.id === id) && !(op.kind === 'update' && op.id === id));

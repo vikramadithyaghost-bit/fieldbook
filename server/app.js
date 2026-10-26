@@ -33,7 +33,9 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     db.prepare('INSERT INTO sessions (token, role, member_id, created_at) VALUES (?, ?, ?, ?)').run(token, role, memberId, new Date().toISOString());
     return token;
   };
-  const activeMembers = () => db.prepare('SELECT id, name, pin, added FROM members WHERE active = 1 ORDER BY name COLLATE NOCASE').all().map(m => ({ ...m }));
+  const memberOut = m => m && ({ id: m.id, name: m.name, pin: m.pin, added: m.added, canEditAll: !!m.can_edit_all });
+  const activeMembers = () => db.prepare('SELECT id, name, pin, added, can_edit_all FROM members WHERE active = 1 ORDER BY name COLLATE NOCASE').all().map(memberOut);
+  const memberById = id => memberOut(db.prepare('SELECT id, name, pin, added, can_edit_all FROM members WHERE id = ?').get(id));
   const genPin = not => {
     const used = new Set(activeMembers().map(m => m.pin));
     let p;
@@ -43,10 +45,10 @@ export function createApp(db, { adminPin = '0000' } = {}) {
 
   const auth = role => (req, res, next) => {
     const token = (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
-    const s = token && db.prepare(`SELECT s.role, s.member_id, m.name, m.active FROM sessions s LEFT JOIN members m ON m.id = s.member_id WHERE s.token = ?`).get(token);
+    const s = token && db.prepare(`SELECT s.role, s.member_id, m.name, m.active, m.can_edit_all FROM sessions s LEFT JOIN members m ON m.id = s.member_id WHERE s.token = ?`).get(token);
     if (!s || (s.role === 'member' && !s.active)) return res.status(401).json({ error: 'Please sign in again' });
     if (role === 'admin' && s.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
-    req.session = { token, role: s.role, memberId: s.member_id, name: s.name };
+    req.session = { token, role: s.role, memberId: s.member_id, name: s.name, editAll: !!s.can_edit_all };
     next();
   };
 
@@ -61,10 +63,10 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'Enter your 4-digit PIN' });
     const key = req.ip + '|' + name.toLowerCase(), wait = lockedFor(key);
     if (wait) return res.status(429).json({ error: `Too many attempts. Try again in ${wait} min.` });
-    const m = db.prepare('SELECT id, name, pin FROM members WHERE active = 1 AND name = ? COLLATE NOCASE').get(name);
+    const m = db.prepare('SELECT id, name, pin, can_edit_all FROM members WHERE active = 1 AND name = ? COLLATE NOCASE').get(name);
     if (!m || m.pin !== pin) { fail(key); return res.status(401).json({ error: 'Incorrect PIN. Ask your admin to reset it.' }); }
     fails.delete(key);
-    res.json({ token: newSession('member', m.id), user: { id: m.id, name: m.name } });
+    res.json({ token: newSession('member', m.id), user: { id: m.id, name: m.name, canEditAll: !!m.can_edit_all } });
   });
 
   app.post('/api/admin/login', (req, res) => {
@@ -80,7 +82,7 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     res.json({ ok: true });
   });
 
-  app.get('/api/me', auth(), (req, res) => res.json({ role: req.session.role, user: req.session.memberId ? { id: req.session.memberId, name: req.session.name } : null }));
+  app.get('/api/me', auth(), (req, res) => res.json({ role: req.session.role, user: req.session.memberId ? { id: req.session.memberId, name: req.session.name, canEditAll: req.session.editAll } : null }));
 
   // Photos are listed on each visit as URLs; the bytes are served separately.
   const photosOf = id => db.prepare('SELECT id FROM photos WHERE visit_id = ? ORDER BY created_at, id').all(id).map(p => ({ id: p.id, url: '/api/photos/' + p.id }));
@@ -124,13 +126,15 @@ export function createApp(db, { adminPin = '0000' } = {}) {
 
   // The admin can change any visit; a member can change the visits they entered.
   // Anyone signed in may still mark a follow-up as done.
-  const canChange = (s, row) => s.role === 'admin' || (!!row.created_by && row.created_by === s.memberId);
+  const isAuthor = (s, row) => s.role === 'admin' || (!!row.created_by && row.created_by === s.memberId);
+  // Members the admin marked "Can edit all visits" may edit anyone's visit; deleting stays with the author.
+  const canEdit = (s, row) => isAuthor(s, row) || s.editAll;
   const isMarkDone = body => Object.keys(body || {}).every(k => k === 'status' || k === 'followUp') && body.status === 'done';
 
   app.patch('/api/visits/:id', auth(), (req, res) => {
     const row = db.prepare('SELECT * FROM visits WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Visit not found' });
-    if (!canChange(req.session, row) && !isMarkDone(req.body)) return res.status(403).json({ error: 'You can only edit visits you entered' });
+    if (!canEdit(req.session, row) && !isMarkDone(req.body)) return res.status(403).json({ error: 'You can only edit visits you entered' });
     const v = cleanVisit({ ...rowToVisit(row), ...req.body, id: row.id });
     const errors = validateVisit(v);
     if (Object.keys(errors).length) return res.status(400).json({ error: Object.values(errors)[0], errors });
@@ -155,7 +159,7 @@ export function createApp(db, { adminPin = '0000' } = {}) {
   app.delete('/api/visits/:id', auth(), (req, res) => {
     const row = db.prepare('SELECT created_by FROM visits WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Visit not found' });
-    if (!canChange(req.session, row)) return res.status(403).json({ error: 'You can only delete visits you entered' });
+    if (!isAuthor(req.session, row)) return res.status(403).json({ error: 'You can only delete visits you entered' });
     db.prepare('DELETE FROM visits WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
   });
@@ -177,7 +181,14 @@ export function createApp(db, { adminPin = '0000' } = {}) {
       id = 'm-' + randomUUID();
       db.prepare('INSERT INTO members (id, name, pin, active, added) VALUES (?, ?, ?, 1, ?)').run(id, name, pin, iso(new Date()));
     }
-    res.status(201).json(db.prepare('SELECT id, name, pin, added FROM members WHERE id = ?').get(id));
+    res.status(201).json(memberById(id));
+  });
+
+  app.patch('/api/members/:id', auth('admin'), (req, res) => {
+    if (typeof req.body?.canEditAll !== 'boolean') return res.status(400).json({ error: 'Nothing to change' });
+    const r = db.prepare('UPDATE members SET can_edit_all = ? WHERE id = ? AND active = 1').run(req.body.canEditAll ? 1 : 0, req.params.id);
+    if (!r.changes) return res.status(404).json({ error: 'Member not found' });
+    res.json(memberById(req.params.id));
   });
 
   app.post('/api/members/:id/reset-pin', auth('admin'), (req, res) => {
@@ -186,7 +197,7 @@ export function createApp(db, { adminPin = '0000' } = {}) {
     const pin = genPin(m.pin);
     db.prepare('UPDATE members SET pin = ? WHERE id = ?').run(pin, m.id);
     db.prepare('DELETE FROM sessions WHERE member_id = ?').run(m.id);
-    res.json(db.prepare('SELECT id, name, pin, added FROM members WHERE id = ?').get(m.id));
+    res.json(memberById(m.id));
   });
 
   // Removing blocks sign-in (and ends open sessions) but keeps the member's past visits.

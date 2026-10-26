@@ -244,3 +244,31 @@ test('upgrading the live database keeps visits and photos and allows not interes
   again.close();
   fs.rmSync(file, { force: true });
 });
+
+test('a member allowed to edit all visits can edit (not delete) anyone\'s visit', async () => {
+  const admin = (await req('/admin/login', { body: { pin: '0000' } })).body.token;
+  const suresh = (await req('/members', { body: { name: 'Suresh Kumar' }, token: admin })).body;
+  assert.equal(suresh.canEditAll, false);
+  const meera = (await req('/login', { body: { name: 'Meera Iyer', pin: '3146' } })).body.token;
+  const v = (await req('/visits', { body: visit({ notes: 'Meera wrote this' }), token: meera })).body;
+
+  let s = (await req('/login', { body: { name: 'Suresh Kumar', pin: suresh.pin } })).body;
+  assert.equal(s.user.canEditAll, false);
+  assert.equal((await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'fixed' }, token: s.token })).status, 403);
+
+  // Members can't grant it; the admin can, and it applies to existing sessions right away.
+  assert.equal((await req('/members/' + suresh.id, { method: 'PATCH', body: { canEditAll: true }, token: meera })).status, 403);
+  const up = await req('/members/' + suresh.id, { method: 'PATCH', body: { canEditAll: true }, token: admin });
+  assert.equal(up.body.canEditAll, true);
+  assert.equal((await req('/me', { token: s.token })).body.user.canEditAll, true);
+  const e = await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'Corrected by Suresh' }, token: s.token });
+  assert.equal(e.status, 200);
+  assert.equal(e.body.notes, 'Corrected by Suresh');
+  assert.equal(e.body.createdBy, v.createdBy); // still Meera's visit
+  assert.equal((await req('/visits/' + v.id, { method: 'DELETE', token: s.token })).status, 403);
+
+  // Turning it off takes effect immediately.
+  await req('/members/' + suresh.id, { method: 'PATCH', body: { canEditAll: false }, token: admin });
+  assert.equal((await req('/visits/' + v.id, { method: 'PATCH', body: { notes: 'again' }, token: s.token })).status, 403);
+  assert.equal((await req('/members', { token: admin })).body.find(m => m.id === suresh.id).canEditAll, false);
+});
